@@ -4,6 +4,8 @@
 
 Diagrams can be designed visually with drag-and-drop shapes, orthogonal connectors, and inline text editing, and then exported or copied to the clipboard with one click to paste directly into GitHub markdown, terminal environments, code comments, Slack, Discord, Jira, or technical documentation — remaining visually intact and aligned.
 
+**🔗 [Try it live](https://jozeta.github.io/AsciiFlow/)**
+
 ![image](Screenshot.png)
 
 ---
