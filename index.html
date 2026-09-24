@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AsciiFlow — ASCII Diagram & Flowchart Editor</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <!-- Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  
+  <!-- Custom Nordic Theme Stylesheet -->
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Navigation / Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <a href="#" class="brand" title="AsciiFlow">
+          <span class="brand-icon">┌─┐</span>
+          <span>AsciiFlow</span>
+        </a>
+
+        <div class="header-divider"></div>
+
+        <button type="button" class="btn-nordic" id="btnNew" title="New Blank Diagram (Ctrl+N)">
+          <i class="bi bi-file-earmark-plus"></i>
+          <span>New</span>
+        </button>
+
+        <!-- Templates Dropdown -->
+        <div class="dropdown">
+          <button class="btn-nordic dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Explore Diagram Templates">
+            <i class="bi bi-collection"></i>
+            <span>Templates</span>
+          </button>
+          <ul class="dropdown-menu shadow-sm">
+            <li><h6 class="dropdown-header">Flowchart Examples</h6></li>
+            <li><a class="dropdown-item" href="#" data-template="flowchart"><i class="bi bi-diagram-3 me-2"></i>Authentication Flow</a></li>
+            <li><a class="dropdown-item" href="#" data-template="architecture"><i class="bi bi-boxes me-2"></i>System Architecture</a></li>
+            <li><a class="dropdown-item" href="#" data-template="decision"><i class="bi bi-signpost-split me-2"></i>Decision Tree</a></li>
+          </ul>
+        </div>
+
+        <div class="header-divider"></div>
+
+        <!-- Import Dropdown -->
+        <div class="dropdown">
+          <button class="btn-nordic dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Import Diagram">
+            <i class="bi bi-folder2-open"></i>
+            <span>Import</span>
+          </button>
+          <ul class="dropdown-menu shadow-sm">
+            <li><a class="dropdown-item" href="#" id="btnImportJSON"><i class="bi bi-filetype-json me-2"></i>Open JSON File...</a></li>
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importAsciiModal"><i class="bi bi-textarea-t me-2"></i>Import ASCII Art...</a></li>
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importMermaidModal"><i class="bi bi-diagram-2 me-2"></i>Import Mermaid...</a></li>
+          </ul>
+        </div>
+        <input type="file" id="importFileInput" accept=".json" style="display:none">
+
+        <!-- Export Dropdown -->
+        <div class="dropdown">
+          <button class="btn-nordic dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Export Diagram">
+            <i class="bi bi-download"></i>
+            <span>Export</span>
+          </button>
+          <ul class="dropdown-menu shadow-sm">
+            <li><h6 class="dropdown-header">Download Files</h6></li>
+            <li><a class="dropdown-item" href="#" id="btnExportJSON"><i class="bi bi-filetype-json me-2"></i>Save as JSON (.json)</a></li>
+            <li><a class="dropdown-item" href="#" id="btnDownloadTxt"><i class="bi bi-file-earmark-text me-2"></i>Download ASCII (.txt)</a></li>
+            <li><a class="dropdown-item" href="#" id="btnExportSVG"><i class="bi bi-filetype-svg me-2"></i>Export as SVG (.svg)</a></li>
+            <li><a class="dropdown-item" href="#" id="btnExportPNG"><i class="bi bi-file-earmark-image me-2"></i>Export as PNG (.png)</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><h6 class="dropdown-header">Sharing</h6></li>
+            <li><a class="dropdown-item" href="#" id="btnCopyMarkdown"><i class="bi bi-markdown me-2"></i>Copy as Markdown Code Block</a></li>
+            <li><a class="dropdown-item" href="#" id="btnShareURL"><i class="bi bi-link-45deg me-2"></i>Copy Shareable Diagram Link</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <!-- Undo / Redo -->
+        <button type="button" class="btn-icon-nordic" id="btnUndo" title="Undo (Ctrl+Z)" disabled>
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </button>
+        <button type="button" class="btn-icon-nordic" id="btnRedo" title="Redo (Ctrl+Shift+Z)" disabled>
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+
+        <div class="header-divider"></div>
+
+        <!-- Unicode vs ASCII switch -->
+        <div class="mode-toggle-group" title="Toggle ASCII / Unicode Box Characters">
+          <button type="button" class="mode-btn active" data-mode="unicode">Unicode</button>
+          <button type="button" class="mode-btn" data-mode="ascii">ASCII</button>
+        </div>
+
+        <div class="header-divider"></div>
+
+        <!-- Preview Toggle -->
+        <button type="button" class="btn-icon-nordic active" id="btnTogglePreview" title="Toggle Live ASCII Preview">
+          <i class="bi bi-layout-sidebar-reverse"></i>
+        </button>
+      </div>
+
+      <div class="header-right">
+        <!-- Copy ASCII Prominent Button -->
+        <button type="button" class="btn-nordic btn-primary-nordic" id="btnCopyAscii" title="Copy ASCII Diagram to Clipboard">
+          <i class="bi bi-clipboard-check"></i>
+          <span>Copy ASCII</span>
+        </button>
+
+        <div class="header-divider"></div>
+
+        <!-- Theme Toggle -->
+        <button type="button" class="btn-icon-nordic" id="themeToggleBtn" title="Toggle Dark / Light Theme" aria-label="Toggle Theme">
+          <i class="bi bi-moon-stars"></i>
+        </button>
+
+        <!-- Settings -->
+        <button type="button" class="btn-icon-nordic" id="btnSettings" data-bs-toggle="modal" data-bs-target="#settingsModal" title="Settings">
+          <i class="bi bi-gear"></i>
+        </button>
+
+        <!-- Help -->
+        <button type="button" class="btn-icon-nordic" id="btnHelp" data-bs-toggle="modal" data-bs-target="#helpModal" title="Keyboard Shortcuts & Help (?)">
+          <i class="bi bi-question-circle"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="app-workspace">
+      <!-- Left Toolbar -->
+      <aside class="app-toolbar" aria-label="Diagram Tools">
+        <button type="button" class="tool-btn active" data-tool="select" title="Select & Move (V)">
+          <i class="bi bi-cursor"></i>
+          <span class="tool-shortcut">V</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="pan" title="Pan Canvas (H / Space+Drag)">
+          <i class="bi bi-hand-index"></i>
+          <span class="tool-shortcut">H</span>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Basic Shapes -->
+        <button type="button" class="tool-btn" data-tool="rectangle" title="Rectangle (R)">
+          <i class="bi bi-square"></i>
+          <span class="tool-shortcut">R</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="rounded-rectangle" title="Rounded Rectangle (U)">
+          <i class="bi bi-bounding-box-circles"></i>
+          <span class="tool-shortcut">U</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="circle" title="Circle / Ellipse (C)">
+          <i class="bi bi-circle"></i>
+          <span class="tool-shortcut">C</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="diamond" title="Diamond Decision (D)">
+          <i class="bi bi-suit-diamond"></i>
+          <span class="tool-shortcut">D</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="parallelogram" title="Parallelogram Data/IO (P)">
+          <i class="bi bi-slash-square"></i>
+          <span class="tool-shortcut">P</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="hexagon" title="Hexagon Preparation (X)">
+          <i class="bi bi-hexagon"></i>
+          <span class="tool-shortcut">X</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="triangle" title="Triangle (T)">
+          <i class="bi bi-triangle"></i>
+          <span class="tool-shortcut">T</span>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Architecture & Cloud Shapes -->
+        <button type="button" class="tool-btn" data-tool="database" title="Database Cylinder (B)">
+          <i class="bi bi-database"></i>
+          <span class="tool-shortcut">B</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="cloud" title="Cloud / Network">
+          <i class="bi bi-cloud"></i>
+        </button>
+        <button type="button" class="tool-btn" data-tool="queue" title="Message Queue / Buffer">
+          <i class="bi bi-hdd-stack"></i>
+        </button>
+        <button type="button" class="tool-btn" data-tool="container" title="Subsystem Container / Boundary">
+          <i class="bi bi-bounding-box"></i>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Connectors & Lines -->
+        <button type="button" class="tool-btn" data-tool="connector" title="Smart Orthogonal Connector (K)">
+          <i class="bi bi-bezier2"></i>
+          <span class="tool-shortcut">K</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="line" title="Line (L)">
+          <i class="bi bi-dash-lg"></i>
+          <span class="tool-shortcut">L</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="arrow" title="Arrow (A)">
+          <i class="bi bi-arrow-right"></i>
+          <span class="tool-shortcut">A</span>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- Text & Notes -->
+        <button type="button" class="tool-btn" data-tool="note" title="Note Box (N)">
+          <i class="bi bi-sticky"></i>
+          <span class="tool-shortcut">N</span>
+        </button>
+        <button type="button" class="tool-btn" data-tool="text" title="Standalone Text Label (T)">
+          <i class="bi bi-fonts"></i>
+          <span class="tool-shortcut">T</span>
+        </button>
+      </aside>
+
+      <!-- Central Canvas Container -->
+      <div class="canvas-container tool-select">
+        <!-- Floating Contextual Property Bar -->
+        <div class="property-bar hidden" id="propertyBar">
+          <!-- Shape Controls -->
+          <div class="prop-section d-flex align-items-center gap-1" id="propShapeControls">
+            <div class="prop-group">
+              <span class="prop-label">Shape</span>
+              <select class="prop-select" id="propShapeType">
+                <option value="rectangle">Rectangle</option>
+                <option value="rounded-rectangle">Rounded Rect</option>
+                <option value="circle">Circle / Ellipse</option>
+                <option value="diamond">Diamond</option>
+                <option value="parallelogram">Parallelogram</option>
+                <option value="hexagon">Hexagon</option>
+                <option value="triangle">Triangle</option>
+                <option value="database">Database</option>
+                <option value="cloud">Cloud</option>
+                <option value="queue">Queue</option>
+                <option value="container">Container</option>
+                <option value="note">Note</option>
+              </select>
+            </div>
+
+            <div class="prop-divider"></div>
+
+            <div class="prop-group">
+              <span class="prop-label">Text</span>
+              <select class="prop-select" id="propTextAlign">
+                <option value="center">Center</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+
+            <button type="button" class="btn-nordic" id="btnPropAutoFit" title="Fit shape size to text">
+              <i class="bi bi-arrows-angle-expand"></i>
+              <span>Auto-fit</span>
+            </button>
+
+            <div class="prop-divider"></div>
+
+            <!-- Alignment Tools (multi-selection) -->
+            <div class="prop-group align-tools-group d-flex align-items-center gap-1" id="propAlignGroup" title="Align Selected Shapes">
+              <button type="button" class="btn-icon-nordic" data-align="left" title="Align Left"><i class="bi bi-align-start"></i></button>
+              <button type="button" class="btn-icon-nordic" data-align="center" title="Align Center"><i class="bi bi-align-center"></i></button>
+              <button type="button" class="btn-icon-nordic" data-align="right" title="Align Right"><i class="bi bi-align-end"></i></button>
+              <button type="button" class="btn-icon-nordic" data-align="top" title="Align Top"><i class="bi bi-align-top"></i></button>
+              <button type="button" class="btn-icon-nordic" data-align="middle" title="Align Middle"><i class="bi bi-align-middle"></i></button>
+              <button type="button" class="btn-icon-nordic" data-align="bottom" title="Align Bottom"><i class="bi bi-align-bottom"></i></button>
+            </div>
+
+            <!-- Distribute Tools -->
+            <div class="prop-group distribute-tools-group d-flex align-items-center gap-1" id="propDistributeGroup" title="Distribute Selected Shapes">
+              <button type="button" class="btn-icon-nordic" data-distribute="horizontal" title="Distribute Horizontally"><i class="bi bi-distribute-horizontal"></i></button>
+              <button type="button" class="btn-icon-nordic" data-distribute="vertical" title="Distribute Vertically"><i class="bi bi-distribute-vertical"></i></button>
+            </div>
+
+            <div class="prop-divider"></div>
+
+            <!-- Group & Ungroup -->
+            <button type="button" class="btn-icon-nordic" id="btnPropGroup" title="Group Selected Shapes (Ctrl+G)">
+              <i class="bi bi-collection"></i>
+            </button>
+            <button type="button" class="btn-icon-nordic" id="btnPropUngroup" title="Ungroup Selected (Ctrl+Shift+G)">
+              <i class="bi bi-grid-3x3"></i>
+            </button>
+
+            <!-- Auto-Layout -->
+            <button type="button" class="btn-nordic" id="btnPropAutoLayout" title="Auto-layout Flowchart Diagram">
+              <i class="bi bi-diagram-3"></i>
+              <span>Layout</span>
+            </button>
+          </div>
+
+          <!-- Connector Controls -->
+          <div class="prop-section d-none align-items-center gap-1" id="propConnectorControls">
+            <div class="prop-group">
+              <span class="prop-label">Start</span>
+              <select class="prop-select" id="propArrowStart" title="Start Arrowhead Terminal">
+                <option value="none">None</option>
+                <option value="triangle">Solid (►)</option>
+                <option value="open">Open (▷)</option>
+                <option value="dot">Dot (●)</option>
+                <option value="diamond">Diamond (◆)</option>
+                <option value="bar">Bar (│)</option>
+              </select>
+            </div>
+
+            <div class="prop-group">
+              <span class="prop-label">End</span>
+              <select class="prop-select" id="propArrowEnd" title="End Arrowhead Terminal">
+                <option value="triangle">Solid (►)</option>
+                <option value="open">Open (▷)</option>
+                <option value="dot">Dot (●)</option>
+                <option value="diamond">Diamond (◆)</option>
+                <option value="bar">Bar (│)</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+
+            <div class="prop-divider"></div>
+
+            <div class="prop-group">
+              <span class="prop-label">Style</span>
+              <select class="prop-select" id="propLineStyle" title="Line Dash / Border Style">
+                <option value="solid">Solid (─)</option>
+                <option value="dashed">Dashed (╌)</option>
+                <option value="dotted">Dotted (┈)</option>
+                <option value="double">Double (═)</option>
+              </select>
+            </div>
+
+            <div class="prop-group">
+              <span class="prop-label">Routing</span>
+              <select class="prop-select" id="propLineRouting" title="Line Routing Mode">
+                <option value="orthogonal">Orthogonal</option>
+                <option value="straight">Straight</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="prop-divider"></div>
+
+          <!-- Common Actions -->
+          <button type="button" class="btn-icon-nordic" id="btnPropDuplicate" title="Duplicate (Ctrl+D)">
+            <i class="bi bi-copy"></i>
+          </button>
+
+          <button type="button" class="btn-icon-nordic text-danger" id="btnPropDelete" title="Delete (Del / Backspace)">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </div>
+
+        <!-- Main HTML5 Canvas -->
+        <canvas id="editorCanvas"></canvas>
+
+        <!-- In-place text editor for double click -->
+        <textarea id="canvasTextEditor" spellcheck="false" placeholder="Enter shape text..."></textarea>
+
+        <div class="canvas-hint">
+          Double-click to edit text • Drag corners to resize • Hover shape to see connection anchors
+        </div>
+      </div>
+
+      <!-- Split-view ASCII Preview Panel -->
+      <aside class="preview-panel" id="previewPanel">
+        <!-- Draggable Left Resize Handle -->
+        <div class="preview-resizer" id="previewResizer" title="Drag to resize preview panel"></div>
+
+        <div class="preview-header">
+          <div class="preview-title">
+            <i class="bi bi-terminal"></i>
+            <span>ASCII Preview</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="preview-badge" id="previewBadgeLines">0 lines</span>
+            <button type="button" class="btn-icon-nordic" id="btnCopyPreview" title="Copy ASCII">
+              <i class="bi bi-clipboard"></i>
+            </button>
+            <button type="button" class="btn-icon-nordic" id="btnClosePreview" title="Close Preview">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="preview-content">
+          <pre class="preview-code-block"><code id="asciiPreviewCode"></code></pre>
+        </div>
+
+        <div class="preview-footer">
+          <span id="previewBadgeChars">0 characters</span>
+          <span>Exact monospace match</span>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Status Bar -->
+    <footer class="app-statusbar">
+      <div class="statusbar-left">
+        <span class="status-item status-mono" id="cursorCoord">Col: 0, Row: 0</span>
+        <span class="status-item" id="statusSelection">0 objects</span>
+      </div>
+
+      <div class="statusbar-center">
+        <button type="button" class="btn-zoom" id="btnGridToggle" title="Toggle Grid Appearance">Grid: dots</button>
+        <span class="status-item status-mono" id="statusMode">Mode: Unicode</span>
+      </div>
+
+      <div class="statusbar-right">
+        <div class="zoom-controls">
+          <button type="button" class="btn-zoom" id="btnZoomOut" title="Zoom Out (Ctrl+Minus)"><i class="bi bi-dash"></i></button>
+          <span class="status-mono px-1" id="zoomDisplay">100%</span>
+          <button type="button" class="btn-zoom" id="btnZoomIn" title="Zoom In (Ctrl+Plus)"><i class="bi bi-plus"></i></button>
+          <button type="button" class="btn-zoom" id="btnZoomReset" title="Reset Zoom to 100%">100%</button>
+          <button type="button" class="btn-zoom" id="btnZoomFit" title="Fit Diagram to View">Fit</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Toast Container for Clipboard Confirmation -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+    <div id="clipboardToast" class="toast toast-nordic align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="d-flex">
+        <div class="toast-body d-flex align-items-center gap-2" id="toastBody">
+          <i class="bi bi-check-circle-fill text-success"></i>
+          <span>ASCII diagram copied to clipboard</span>
+        </div>
+        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal fade modal-nordic" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="settingsModalLabel"><i class="bi bi-gear me-2"></i>Preferences & Settings</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="settingsCharSet" class="form-label font-monospace fw-semibold small">Character Set Mode</label>
+            <select class="form-select form-select-sm" id="settingsCharSet">
+              <option value="unicode">Unicode Standard (┌ ─ ┐ │ └ ┘ ►)</option>
+              <option value="unicode-curved">Unicode Curved (╭ ─ ╮ │ ╰ ╯ ►)</option>
+              <option value="ascii">ASCII Strict (+ - | > ^ v)</option>
+            </select>
+            <div class="form-text">Choose Unicode for modern Markdown & terminals, or ASCII for legacy monospace environments.</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="settingsGrid" class="form-label font-monospace fw-semibold small">Canvas Grid Style</label>
+            <select class="form-select form-select-sm" id="settingsGrid">
+              <option value="dots">Subtle Dots (Recommended)</option>
+              <option value="lines">Cell Lines</option>
+              <option value="none">Blank Canvas</option>
+            </select>
+          </div>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="settingsTrim" checked>
+            <label class="form-check-label small" for="settingsTrim">Auto-trim diagram whitespace on export</label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts & Help Modal -->
+  <div class="modal fade modal-nordic" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="helpModalLabel"><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts & Guide</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h6 class="fw-bold mb-3 text-primary">Editing Shortcuts</h6>
+              <div class="shortcut-row"><span>Undo</span><span class="shortcut-key">Ctrl + Z</span></div>
+              <div class="shortcut-row"><span>Redo</span><span class="shortcut-key">Ctrl + Shift + Z</span></div>
+              <div class="shortcut-row"><span>Copy ASCII / Object</span><span class="shortcut-key">Ctrl + C</span></div>
+              <div class="shortcut-row"><span>Duplicate Shape</span><span class="shortcut-key">Ctrl + D</span></div>
+              <div class="shortcut-row"><span>Select All</span><span class="shortcut-key">Ctrl + A</span></div>
+              <div class="shortcut-row"><span>Delete Selected</span><span class="shortcut-key">Del / Backspace</span></div>
+              <div class="shortcut-row"><span>Nudge 1 Cell</span><span class="shortcut-key">Arrow Keys</span></div>
+              <div class="shortcut-row"><span>Nudge 5 Cells</span><span class="shortcut-key">Shift + Arrows</span></div>
+              <div class="shortcut-row"><span>Edit Text</span><span class="shortcut-key">Double Click</span></div>
+              <div class="shortcut-row"><span>Pan Canvas</span><span class="shortcut-key">Space + Drag</span></div>
+            </div>
+
+            <div class="col-md-6">
+              <h6 class="fw-bold mb-3 text-primary">Tool Selection</h6>
+              <div class="shortcut-row"><span>Select & Move</span><span class="shortcut-key">V</span></div>
+              <div class="shortcut-row"><span>Pan Tool</span><span class="shortcut-key">H</span></div>
+              <div class="shortcut-row"><span>Rectangle</span><span class="shortcut-key">R</span></div>
+              <div class="shortcut-row"><span>Rounded Rectangle</span><span class="shortcut-key">U</span></div>
+              <div class="shortcut-row"><span>Diamond (Decision)</span><span class="shortcut-key">D</span></div>
+              <div class="shortcut-row"><span>Parallelogram (I/O)</span><span class="shortcut-key">P</span></div>
+              <div class="shortcut-row"><span>Hexagon (Prep)</span><span class="shortcut-key">X</span></div>
+              <div class="shortcut-row"><span>Circle / Ellipse</span><span class="shortcut-key">C</span></div>
+              <div class="shortcut-row"><span>Connector</span><span class="shortcut-key">K</span></div>
+              <div class="shortcut-row"><span>Text Label</span><span class="shortcut-key">T</span></div>
+              <div class="shortcut-row"><span>Note Box</span><span class="shortcut-key">N</span></div>
+            </div>
+          </div>
+
+          <div class="alert alert-light border mt-4 mb-0 small">
+            <strong>Pro Tip:</strong> Click and drag from any blue anchor point on a shape to automatically route an orthogonal connector to another shape.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Got it</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import ASCII Art Modal -->
+  <div class="modal fade modal-nordic" id="importAsciiModal" tabindex="-1" aria-labelledby="importAsciiModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="importAsciiModalLabel"><i class="bi bi-textarea-t me-2"></i>Import ASCII Art Diagram</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            Paste any ASCII or Unicode text diagram below. Boxes, labels, borders, and connectors will automatically be parsed into editable diagram shapes!
+          </p>
+          <div class="mb-3">
+            <textarea id="importAsciiText" class="form-control font-monospace" rows="12" spellcheck="false" placeholder="┌────────────────┐       ┌────────────────┐
+│     START      ├──────►│    PROCESS     │
+└────────────────┘       └────────┬───────┘
+                                  │
+                                  ▼
+                         ┌────────────────┐
+                         │      END       │
+                         └────────────────┘"></textarea>
+          </div>
+          <div id="importAsciiFeedback" class="small text-danger mb-0"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary-nordic" id="btnSubmitImportAscii">
+            <i class="bi bi-magic me-1"></i>Import as Diagram
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Mermaid Flowchart Modal -->
+  <div class="modal fade modal-nordic" id="importMermaidModal" tabindex="-1" aria-labelledby="importMermaidModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="importMermaidModalLabel"><i class="bi bi-diagram-2 me-2"></i>Import Mermaid Flowchart</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            Paste Mermaid flowchart syntax (<code>graph TD</code> or <code>graph LR</code>). Nodes, shapes, edge types, and labels will be parsed and arranged with auto-layout!
+          </p>
+          <div class="mb-3">
+            <textarea id="importMermaidText" class="form-control font-monospace" rows="12" spellcheck="false" placeholder="graph TD
+    A[Start Request] --> B{Valid Auth?}
+    B -->|Yes| C[(Database)]
+    B -->|No| D[/Error Response/]
+    C --> E[Finish]"></textarea>
+          </div>
+          <div id="importMermaidFeedback" class="small text-danger mb-0"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary-nordic" id="btnSubmitImportMermaid">
+            <i class="bi bi-diagram-3 me-1"></i>Import &amp; Layout
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <!-- Bootstrap 5 Bundle JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- AsciiFlow Modules -->
+  <script src="js/parser.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/shapes.js"></script>
+  <script src="js/connectors.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

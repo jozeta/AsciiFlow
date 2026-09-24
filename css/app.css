@@ -1,0 +1,758 @@
+/* ==========================================================================
+   AsciiFlow - Clean Nordic Stylesheet
+   Minimal, Calm, Professional, Spacious, Modern, Functional
+   ========================================================================== */
+
+:root {
+  /* Nordic Light Palette */
+  --bg-app: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-elevated: #ffffff;
+  --bg-canvas: #fdfdfd;
+  --bg-toolbar: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-active: #e2e8f0;
+  --bg-input: #ffffff;
+  
+  --border-subtle: #e2e8f0;
+  --border-medium: #cbd5e1;
+  --border-focus: #3b82f6;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
+
+  /* Nordic Accents */
+  --accent-primary: #2563eb;
+  --accent-primary-hover: #1d4ed8;
+  --accent-subtle: #eff6ff;
+  --accent-border: #bfdbfe;
+  
+  --nordic-frost: #0284c7;
+  --nordic-moss: #10b981;
+  --nordic-amber: #f59e0b;
+  --nordic-rose: #ef4444;
+
+  /* Canvas Character Grid */
+  --grid-dot: #cbd5e1;
+  --grid-line: #f1f5f9;
+  --shape-fill: transparent;
+  --shape-border-color: #0f172a;
+  --shape-text-color: #0f172a;
+  --selection-color: #2563eb;
+  --selection-fill: rgba(37, 99, 235, 0.08);
+  --anchor-color: #0284c7;
+  --anchor-hover: #0369a1;
+
+  /* Monospace Font Stack */
+  --font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", "Consolas", "Liberation Mono", Menlo, Courier, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+}
+
+[data-theme="dark"] {
+  /* Nordic Dark Palette (Charcoal, Night Sky & Frost) */
+  --bg-app: #090d16;
+  --bg-surface: #0f172a;
+  --bg-surface-elevated: #1e293b;
+  --bg-canvas: #090d16;
+  --bg-toolbar: #0f172a;
+  --bg-hover: #1e293b;
+  --bg-active: #334155;
+  --bg-input: #1e293b;
+
+  --border-subtle: #1e293b;
+  --border-medium: #334155;
+  --border-focus: #60a5fa;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --text-inverse: #0f172a;
+
+  /* Nordic Dark Accents */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #60a5fa;
+  --accent-subtle: rgba(59, 130, 246, 0.15);
+  --accent-border: #2563eb;
+
+  --nordic-frost: #38bdf8;
+  --nordic-moss: #34d399;
+  --nordic-amber: #fbbf24;
+  --nordic-rose: #f87171;
+
+  /* Canvas Character Grid */
+  --grid-dot: #1e293b;
+  --grid-line: #141e33;
+  --shape-fill: transparent;
+  --shape-border-color: #f8fafc;
+  --shape-text-color: #f8fafc;
+  --selection-color: #60a5fa;
+  --selection-fill: rgba(96, 165, 250, 0.12);
+  --anchor-color: #38bdf8;
+  --anchor-hover: #7dd3fc;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+}
+
+/* Base Resets */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* App Shell Layout */
+#app {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Top Navigation / Header */
+.app-header {
+  height: 52px;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 40;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.header-left, .header-center, .header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+  margin-right: 12px;
+}
+
+.brand-icon {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--accent-subtle);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.header-divider {
+  width: 1px;
+  height: 22px;
+  background-color: var(--border-subtle);
+  margin: 0 4px;
+}
+
+/* Button & Tool Styles */
+.btn-nordic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-nordic:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-focus);
+}
+
+.btn-nordic:active {
+  background-color: var(--bg-active);
+}
+
+.btn-nordic.btn-primary-nordic {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+}
+
+.btn-nordic.btn-primary-nordic:hover {
+  background-color: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+
+.btn-icon-nordic {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-icon-nordic:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.btn-icon-nordic:active {
+  background-color: var(--bg-active);
+}
+
+.btn-icon-nordic:disabled, .btn-nordic:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-icon-nordic.active {
+  background-color: var(--accent-subtle);
+  color: var(--accent-primary);
+  border-color: var(--accent-border);
+}
+
+/* Mode pill switch */
+.mode-toggle-group {
+  display: flex;
+  background-color: var(--bg-hover);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.mode-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mode-btn.active {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Main Workspace Area */
+.app-workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Left Toolbar */
+.app-toolbar {
+  width: 56px;
+  background-color: var(--bg-toolbar);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 4px;
+  z-index: 30;
+  flex-shrink: 0;
+  user-select: none;
+  overflow-y: auto;
+}
+
+.toolbar-divider {
+  width: 32px;
+  height: 1px;
+  background-color: var(--border-subtle);
+  margin: 6px 0;
+}
+
+.tool-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all var(--transition-fast);
+  font-size: 17px;
+}
+
+.tool-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tool-btn.active {
+  background-color: var(--accent-subtle);
+  color: var(--accent-primary);
+  border-color: var(--accent-border);
+}
+
+.tool-btn .tool-shortcut {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  opacity: 0.6;
+}
+
+/* Contextual Property Bar */
+.property-bar {
+  position: absolute;
+  top: 12px;
+  left: 72px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-md);
+  z-index: 25;
+  user-select: none;
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.property-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+}
+
+.prop-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.prop-select {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border-medium);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.prop-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prop-section .btn-icon-nordic {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
+.prop-divider {
+  width: 1px;
+  height: 18px;
+  background-color: var(--border-subtle);
+}
+
+/* Canvas Area */
+.canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+  cursor: default;
+}
+
+.canvas-container.tool-select {
+  cursor: default;
+}
+
+.canvas-container.tool-pan {
+  cursor: grab;
+}
+
+.canvas-container.tool-panning {
+  cursor: grabbing !important;
+}
+
+.canvas-container.tool-draw {
+  cursor: crosshair;
+}
+
+#editorCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* In-place Text Editor Overlay */
+#canvasTextEditor {
+  position: absolute;
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 18px;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1.5px solid var(--accent-primary);
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 0;
+  outline: none;
+  resize: none;
+  z-index: 50;
+  box-shadow: var(--shadow-md);
+  white-space: pre;
+  overflow: hidden;
+}
+
+/* Split-view ASCII Preview Panel */
+.preview-panel {
+  width: 380px;
+  min-width: 220px;
+  max-width: 80vw;
+  background-color: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.preview-panel.resizing {
+  transition: none !important;
+  user-select: none;
+}
+
+.preview-panel.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  border-left: none;
+  overflow: hidden;
+}
+
+/* Draggable left edge resize handle */
+.preview-resizer {
+  position: absolute;
+  left: -5px;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 60;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.preview-resizer:hover, .preview-resizer.is-dragging {
+  background-color: var(--accent-primary);
+  opacity: 0.6;
+}
+
+.preview-header {
+  height: 44px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preview-badge {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.preview-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background-color: var(--bg-app);
+}
+
+.preview-code-block {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre;
+  color: var(--text-primary);
+  user-select: text;
+  margin: 0;
+  display: inline-block;
+  min-width: 100%;
+}
+
+.preview-footer {
+  height: 38px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Bottom Status Bar */
+.app-statusbar {
+  height: 28px;
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: none;
+  flex-shrink: 0;
+  z-index: 35;
+}
+
+.statusbar-left, .statusbar-center, .statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-zoom {
+  padding: 1px 6px;
+  font-size: 11px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.btn-zoom:hover {
+  background: var(--bg-active);
+}
+
+/* Floating Quick Help / Canvas Tooltips */
+.canvas-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 72px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* Modal styling overrides for Nordic feel */
+.modal-nordic .modal-content {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+}
+
+.modal-nordic .modal-header {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 20px;
+}
+
+.modal-nordic .modal-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modal-nordic .modal-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 20px;
+}
+
+.modal-nordic .btn-close {
+  filter: var(--text-primary) == #f8fafc ? invert(1) : none;
+}
+
+/* Toast Styling */
+.toast-nordic {
+  background-color: var(--bg-surface-elevated) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-medium) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.toast-nordic .toast-header {
+  background-color: var(--bg-surface) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Shortcuts grid */
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.shortcut-key {
+  font-family: var(--font-mono);
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Responsive adjustments */
+@media (max-width: 840px) {
+  .preview-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    height: 100%;
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+  }
+  .property-bar {
+    left: 60px;
+    right: 12px;
+    flex-wrap: wrap;
+  }
+}
