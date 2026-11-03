@@ -40,6 +40,8 @@
     setTheme(theme, save = true) {
       this.currentTheme = theme === 'dark' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', this.currentTheme);
+      // Bootstrap's own colours (help text, code, alerts) follow the theme too
+      document.documentElement.setAttribute('data-bs-theme', this.currentTheme);
 
       if (save && global.AsciiStorage) {
         global.AsciiStorage.savePreferences({ theme: this.currentTheme });

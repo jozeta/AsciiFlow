@@ -76,6 +76,7 @@
             <li><hr class="dropdown-divider"></li>
             <li><h6 class="dropdown-header">Sharing</h6></li>
             <li><a class="dropdown-item" href="#" id="btnCopyMarkdown"><i class="bi bi-markdown me-2"></i>Copy as Markdown Code Block</a></li>
+            <li><a class="dropdown-item" href="#" id="btnCopyMermaid"><i class="bi bi-diagram-2 me-2"></i>Copy as Mermaid Flowchart</a></li>
             <li><a class="dropdown-item" href="#" id="btnShareURL"><i class="bi bi-link-45deg me-2"></i>Copy Shareable Diagram Link</a></li>
           </ul>
         </div>
@@ -231,7 +232,7 @@
           <div class="prop-section d-flex align-items-center gap-1" id="propShapeControls">
             <div class="prop-group">
               <span class="prop-label">Shape</span>
-              <select class="prop-select" id="propShapeType">
+              <select class="prop-select" id="propShapeType" aria-label="Shape type">
                 <option value="rectangle">Rectangle</option>
                 <option value="rounded-rectangle">Rounded Rect</option>
                 <option value="circle">Circle / Ellipse</option>
@@ -251,7 +252,7 @@
 
             <div class="prop-group">
               <span class="prop-label">Text</span>
-              <select class="prop-select" id="propTextAlign">
+              <select class="prop-select" id="propTextAlign" aria-label="Text alignment">
                 <option value="center">Center</option>
                 <option value="left">Left</option>
                 <option value="right">Right</option>
@@ -358,7 +359,7 @@
         </div>
 
         <!-- Main HTML5 Canvas -->
-        <canvas id="editorCanvas"></canvas>
+        <canvas id="editorCanvas" role="img" aria-label="Diagram editor canvas. The same diagram is available as text in the ASCII preview panel; keyboard shortcuts are listed under Help."></canvas>
 
         <!-- In-place text editor for double click -->
         <textarea id="canvasTextEditor" spellcheck="false" placeholder="Enter shape text..."></textarea>
@@ -389,7 +390,7 @@
           </div>
         </div>
 
-        <div class="preview-content">
+        <div class="preview-content" tabindex="0" role="region" aria-label="ASCII preview of the diagram">
           <pre class="preview-code-block"><code id="asciiPreviewCode"></code></pre>
         </div>
 
@@ -572,8 +573,7 @@
         </div>
         <div class="modal-body">
           <p class="small text-muted mb-2">
-            Paste Mermaid flowchart syntax (<code>graph TD</code> or <code>graph LR</code>). Nodes, shapes, edge types, and labels will be parsed and arranged with auto-layout!
-          </p>
+            Paste a Mermaid flowchart (<code>graph</code> or <code>flowchart</code>, any direction: <code>TD</code>, <code>LR</code>, <code>BT</code>, <code>RL</code>). All node shapes, edge styles, labels and subgraphs are imported and laid out automatically.</p>
           <div class="mb-3">
             <textarea id="importMermaidText" class="form-control font-monospace" rows="12" spellcheck="false" placeholder="graph TD
     A[Start Request] --> B{Valid Auth?}

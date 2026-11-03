@@ -20,7 +20,7 @@
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b; /* 4.8:1 on white */
   --text-inverse: #ffffff;
 
   /* Nordic Accents */
@@ -76,7 +76,7 @@
 
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
-  --text-muted: #64748b;
+  --text-muted: #94a3b8; /* 6.9:1 on the dark panels */
   --text-inverse: #0f172a;
 
   /* Nordic Dark Accents */
@@ -213,7 +213,8 @@ html, body {
   background-color: var(--bg-active);
 }
 
-.btn-nordic.btn-primary-nordic {
+.btn-nordic.btn-primary-nordic,
+.btn.btn-primary-nordic {
   background-color: var(--accent-primary);
   border-color: var(--accent-primary);
   color: #ffffff;
@@ -221,7 +222,8 @@ html, body {
   box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
 }
 
-.btn-nordic.btn-primary-nordic:hover {
+.btn-nordic.btn-primary-nordic:hover,
+.btn.btn-primary-nordic:hover {
   background-color: var(--accent-primary-hover);
   border-color: var(--accent-primary-hover);
 }
@@ -755,4 +757,29 @@ html, body {
     right: 12px;
     flex-wrap: wrap;
   }
+}
+
+/* Accessibility: readable accents on the dark surfaces, and a visible
+   keyboard focus ring on the focusable preview */
+[data-theme="dark"] .text-primary {
+  color: #93c5fd !important;
+}
+
+.preview-content:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* White on the dark theme's lighter accent is only 3.7:1; primary buttons use
+   the deeper blue (5.2:1) */
+[data-theme="dark"] .btn-nordic.btn-primary-nordic,
+[data-theme="dark"] .btn.btn-primary-nordic {
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+[data-theme="dark"] .btn-nordic.btn-primary-nordic:hover,
+[data-theme="dark"] .btn.btn-primary-nordic:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
 }

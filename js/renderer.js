@@ -139,6 +139,9 @@
   const DIR_UP = 4;
   const DIR_DOWN = 8;
 
+  // Junction characters a shape border may already hold
+  const BORDER_JUNCTION_CHARS = new Set(['┼', '├', '┤', '┬', '┴', '+', '╬']);
+
   // Shape border characters a connector can join with a junction
   const STRAIGHT_BORDER_DIRS = {
     '─': DIR_LEFT | DIR_RIGHT, '-': DIR_LEFT | DIR_RIGHT,
@@ -262,6 +265,9 @@
       // A connector ending on (or crossing) a straight shape border joins it
       // with a T-junction (or a cross) instead of cutting through it
       const borderDirs = currentType === 'border' ? STRAIGHT_BORDER_DIRS[this.cells[r][c]] : 0;
+      // A line ending on a slanted or pointed outline (a diamond's tip, a
+      // slash) stops there instead of erasing it
+      if (currentType === 'border' && !borderDirs && !BORDER_JUNCTION_CHARS.has(this.cells[r][c])) return;
       if (borderDirs && !(borderDirs & mask)) {
         this.cells[r][c] = glyphFor(borderDirs | mask);
         this.cellTypes[r][c] = 'junction';
@@ -1343,7 +1349,11 @@
         const toAnchor = conn.toAnchor || 'auto';
         const info = this.calculateOptimalRouteInfo(shapeFrom, shapeTo, fromAnchor, toAnchor, hasArrow);
         const obstacles = this.routeObstacles(shapeMap);
-        if (!this.routeCrossesShapes(info.points, obstacles, shapeFrom, shapeTo)) return info;
+        const sides = this.defaultSides(shapeFrom, shapeTo);
+        const fromSide = fromAnchor === 'auto' ? sides.from : fromAnchor;
+        const toSide = toAnchor === 'auto' ? sides.to : toAnchor;
+        if (this.routeIsWellFormed(info.points, fromSide, toSide) &&
+            !this.routeCrossesShapes(info.points, obstacles, shapeFrom, shapeTo)) return info;
         const usedSides = this.sidesInUse(conn, shapeMap, connectors, obstacles);
         return this.routeAroundShapes(shapeFrom, shapeTo, fromAnchor, toAnchor, hasArrow, obstacles, usedSides) || info;
       }
@@ -1712,6 +1722,21 @@
       return used;
     }
 
+    /**
+     * Does the route leave its start shape and enter its target through the
+     * given sides? (calculateOptimalRouteInfo's fallback for unusual pairs of
+     * sides may arrive sideways, e.g. along the target's own border.)
+     */
+    routeIsWellFormed(points, fromSide, toSide) {
+      const OUT = { right: [1, 0], left: [-1, 0], bottom: [0, 1], top: [0, -1] };
+      if (!points || points.length < 2 || !OUT[fromSide] || !OUT[toSide]) return false;
+      const heading = (a, b) => [Math.sign(b.x - a.x), Math.sign(b.y - a.y)];
+      const first = heading(points[0], points[1]);
+      const last = heading(points[points.length - 2], points[points.length - 1]);
+      return first[0] === OUT[fromSide][0] && first[1] === OUT[fromSide][1] &&
+        last[0] === -OUT[toSide][0] && last[1] === -OUT[toSide][1];
+    }
+
     // The sides calculateOptimalRouteInfo picks for 'auto' anchors
     defaultSides(fromShape, toShape) {
       const dx = (toShape.x + Math.floor(toShape.w / 2)) - (fromShape.x + Math.floor(fromShape.w / 2));
@@ -1781,15 +1806,8 @@
           // the same diagram with these anchors set explicitly (e.g. after
           // re-import) routes identically
           const standard = this.calculateOptimalRouteInfo(fromShape, toShape, fa, ta, hasArrow);
-          const sp = standard.points;
-          const heading = (a, b) => [Math.sign(b.x - a.x), Math.sign(b.y - a.y)];
-          const same = (u, v) => u[0] === v[0] && u[1] === v[1];
-          // Only a route that really leaves and enters through these sides
-          // (the standard router's fallback for odd pairs may not)
-          const wellFormed = sp.length >= 2 &&
-            same(heading(sp[0], sp[1]), ep.startDir) &&
-            same(heading(sp[sp.length - 2], sp[sp.length - 1]), ep.endDir);
-          if (wellFormed && !this.routeCrossesShapes(standard.points, obstacles, fromShape, toShape)) {
+          if (this.routeIsWellFormed(standard.points, fa, ta) &&
+              !this.routeCrossesShapes(standard.points, obstacles, fromShape, toShape)) {
             const pts = standard.points;
             let len = 0;
             for (let i = 0; i < pts.length - 1; i++) len += Math.abs(pts[i + 1].x - pts[i].x) + Math.abs(pts[i + 1].y - pts[i].y);
@@ -1812,6 +1830,8 @@
               const cx = cell % gw, cy = (cell - cx) / gw;
               for (let nd = 0; nd < 4; nd++) {
                 if (nd === ((dir + 2) & 3)) continue; // no reversing
+                // Leave the start shape straight out, not along its side
+                if (state === startState && nd !== dir) continue;
                 const nx = cx + DIRS[nd][0], ny = cy + DIRS[nd][1];
                 if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
                 const ncell = ny * gw + nx;

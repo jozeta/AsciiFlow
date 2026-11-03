@@ -6,6 +6,14 @@
 (function (global) {
   'use strict';
 
+  // Compare diagram states by content. updatedAt is left out: it is stamped
+  // afresh every time a diagram is normalised (including on undo/redo), so it
+  // would make identical diagrams look different.
+  function sameState(a, b) {
+    const content = (s) => JSON.stringify(s, (key, value) => (key === 'updatedAt' ? undefined : value));
+    return content(a) === content(b);
+  }
+
   class HistoryManager {
     constructor(maxStates = 100) {
       this.maxStates = maxStates;
@@ -53,7 +61,7 @@
       // Avoid pushing identical snapshot to top of stack
       if (this.undoStack.length > 0) {
         const top = this.undoStack[this.undoStack.length - 1];
-        if (JSON.stringify(top) === JSON.stringify(snapshot)) {
+        if (sameState(top, snapshot)) {
           return;
         }
       }
@@ -79,7 +87,7 @@
     undo(currentState) {
       const top = this.undoStack[this.undoStack.length - 1];
       const unrecorded = currentState && top &&
-        JSON.stringify(currentState) !== JSON.stringify(top);
+        !sameState(currentState, top);
 
       if (unrecorded) {
         // Go back to the last recorded state; Redo restores the live one

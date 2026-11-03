@@ -57,3 +57,15 @@ test('unrecorded changes are undone first and can be redone', () => {
   assert.equal(plain(h.undo({ n: 9 })).n, 1);
   assert.equal(plain(h.redo()).n, 9);
 });
+
+test('a fresh updatedAt stamp does not count as a change', () => {
+  // Undo/redo re-normalise the diagram, which stamps a new updatedAt
+  const h = new AsciiHistory();
+  h.push({ n: 0, updatedAt: 'a' });
+  h.push({ n: 1, updatedAt: 'b' });
+  assert.equal(plain(h.undo({ n: 1, updatedAt: 'c' })).n, 0);
+  assert.equal(plain(h.redo()).n, 1);
+  assert.equal(plain(h.undo({ n: 1, updatedAt: 'd' })).n, 0);
+  h.push({ n: 0, updatedAt: 'e' }); // re-recording the same state adds nothing
+  assert.equal(h.canUndo(), false);
+});

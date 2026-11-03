@@ -602,8 +602,20 @@
       const endOf = (cell, open, forcedShape) => {
         const [x, y] = cell;
         const arrow = ARROW_GLYPHS[at(x, y)];
+        // A corner at a line's end bends into the shape it touches (e.g. a
+        // ┘ right under a diamond's tip): look along its other arm too
+        if (!forcedShape && !arrow && !shapeBeyond(x, y, open)) {
+          const into = OPPOSITE[open];
+          const other = ALL_DIRS.find(o => o !== into && o !== open && (glyphDirs(x, y) & o) &&
+            !linked(x, y, o) && shapeBeyond(x, y, o));
+          if (other !== undefined) open = other;
+        }
+        const [dx, dy] = STEP[open];
         return {
           point: { x, y },
+          // The renderer marks where a connector leaves a box with a
+          // junction in its border: a hint for which end is the source
+          atBorderJunction: BORDER_JUNCTIONS.includes(at(x + dx, y + dy)) && !!owner[y + dy]?.[x + dx],
           shape: forcedShape || shapeBeyond(x, y, open),
           anchor: ANCHOR_FOR_ENTRY[open],
           arrow: arrow && (arrow[0] & OPPOSITE[open]) ? arrow[1] : 'none',
@@ -681,8 +693,11 @@
     function addConnector(piece) {
       let [from, to] = piece.ends;
       let corners = piece.corners;
-      // Point the connector at its arrowhead
-      if (from.arrow !== 'none' && to.arrow === 'none') {
+      // Point the connector at its arrowhead; without arrowheads, start
+      // from the end that leaves a box through a border junction
+      const flip = (from.arrow !== 'none' && to.arrow === 'none') ||
+        (from.arrow === 'none' && to.arrow === 'none' && to.atBorderJunction && !from.atBorderJunction);
+      if (flip) {
         [from, to] = [to, from];
         corners = corners.slice().reverse();
       }
@@ -798,227 +813,483 @@
   }
 
   // ==========================================
-  // 2. Mermaid Flowchart -> Diagram Model Parser
+  // 2. Mermaid Flowchart <-> Diagram Model
   // ==========================================
 
+  // Node shapes: Mermaid brackets -> AsciiFlow shape type. Longest openers
+  // first so "((" is not read as "(".
+  const MERMAID_SHAPES = [
+    ['(((', ')))', 'circle'],
+    ['([', '])', 'rounded-rectangle'],
+    ['[[', ']]', 'queue'],
+    ['[(', ')]', 'database'],
+    ['((', '))', 'circle'],
+    ['{{', '}}', 'hexagon'],
+    ['[/', '\\]', 'triangle'],
+    ['[\\', '/]', 'triangle'],
+    ['[/', '/]', 'parallelogram'],
+    ['[\\', '\\]', 'parallelogram'],
+    ['>', ']', 'rectangle'],
+    ['[', ']', 'rectangle'],
+    ['(', ')', 'rounded-rectangle'],
+    ['{', '}', 'diamond']
+  ];
+
+  // The bracket pair used when exporting each shape type
+  const MERMAID_BRACKETS = {
+    'rectangle': ['[', ']'],
+    'rounded-rectangle': ['(', ')'],
+    'circle': ['((', '))'],
+    'diamond': ['{', '}'],
+    'hexagon': ['{{', '}}'],
+    'parallelogram': ['[/', '/]'],
+    'triangle': ['[/', '\\]'],
+    'database': ['[(', ')]'],
+    'queue': ['[[', ']]'],
+    'cloud': ['(', ')'],
+    'note': ['[', ']']
+  };
+
+  // Edge operators: the link body between two nodes, e.g. --> -.-> ==> --o
+  // <--> ---- and labelled forms -- text --> / -. text .-> / == text ==>
+  const EDGE_RE = /^\s*(<|o|x)?(-{2,}|-\.+-|={2,})(>|o|x)?(?:\|([^|]*)\|)?/;
+  const EDGE_TEXT_RE = /^\s*(<|o|x)?(--|-\.|==)\s+(.+?)\s+(-{2,}|\.+-|={2,})(>|o|x)?/;
+  const ID_RE = /^\s*([A-Za-z0-9_][A-Za-z0-9_.-]*)/;
+
+  function cleanMermaidText(text) {
+    let t = text.trim();
+    if (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') t = t.slice(1, -1);
+    return t.replace(/<br\s*\/?>/gi, '\n').replace(/#quot;/g, '"').trim();
+  }
+
   function parseMermaidToDiagram(mermaidText) {
-    if (!mermaidText || typeof mermaidText !== 'string') {
-      return { version: 1, name: 'Imported Mermaid', mode: 'unicode', shapes: [], connectors: [], texts: [], notes: [] };
+    const empty = (name) => ({ version: 1, name, mode: 'unicode', shapes: [], connectors: [], texts: [], notes: [] });
+    if (!mermaidText || typeof mermaidText !== 'string') return empty('Imported Mermaid');
+
+    // Statements: one per line or separated by ';'; %% starts a comment
+    // (a ';' inside quotes or ending an entity like #quot; does not split)
+    const statements = [];
+    for (const raw of mermaidText.split(/\r?\n/)) {
+      const line = raw.replace(/%%.*$/, '');
+      let current = '';
+      let quoted = false;
+      for (const ch of line) {
+        if (ch === '"') quoted = !quoted;
+        if (ch === ';' && !quoted && !/#[A-Za-z0-9]+$/.test(current)) {
+          if (current.trim()) statements.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      if (current.trim()) statements.push(current.trim());
     }
 
-    const lines = mermaidText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('%%'));
-    let direction = 'TB'; // 'TB' | 'LR' | 'TD' | 'BT' | 'RL'
+    let direction = 'TB';
+    const nodeMap = new Map(); // id -> { id, text, type, group }
+    const order = [];
+    const edges = [];
+    const groups = []; // subgraphs: { id, title, parent, members: [] }
+    const groupStack = [];
 
-    const nodeMap = new Map(); // id -> { id, text, type }
-    const rawEdges = []; // { from, to, label, arrowStart, arrowEnd, style }
-
-    for (const line of lines) {
-      if (/^(graph|flowchart)\s+/i.test(line)) {
-        const matchDir = line.match(/^(?:graph|flowchart)\s+(TB|TD|LR|BT|RL)/i);
-        if (matchDir) {
-          direction = matchDir[1].toUpperCase();
-          if (direction === 'TD') direction = 'TB';
-        }
-        continue;
+    const touch = (id) => {
+      if (!nodeMap.has(id)) {
+        nodeMap.set(id, { id, text: id, type: 'rectangle', group: groupStack.length ? groupStack[groupStack.length - 1] : null });
+        order.push(id);
       }
+      return nodeMap.get(id);
+    };
 
-      // Check for connection patterns: A --> B, A[Start] --> B(End), etc.
-      // Connection regex matches: (fromNodePart)\s*(-->|---|==>|-\.->)\s*(\|label\|)?\s*(toNodePart)
-      const edgeRegex = /^([a-zA-Z0-9_-]+(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\}|\[\([^)]+\)\])?)?\s*(-->|---|==>|-\.->|<-->)\s*(?:\|([^|]+)\|)?\s*([a-zA-Z0-9_-]+(?:\[[^\]]+\]|\([^)]+\)|\{[^}]+\}|\[\([^)]+\)\])?)$/;
-      const edgeMatch = line.match(edgeRegex);
-
-      if (edgeMatch) {
-        const fromPart = edgeMatch[1];
-        const arrowType = edgeMatch[2];
-        const label = edgeMatch[3] ? edgeMatch[3].trim() : '';
-        const toPart = edgeMatch[4];
-
-        const fromNode = parseMermaidNode(fromPart, nodeMap);
-        const toNode = parseMermaidNode(toPart, nodeMap);
-
-        if (fromNode && toNode) {
-          const isDashed = arrowType === '-.->';
-          const isDouble = arrowType === '==>';
-          const isBoth = arrowType === '<-->';
-          const isArrow = arrowType.includes('>');
-
-          rawEdges.push({
-            from: fromNode.id,
-            to: toNode.id,
-            label,
-            arrowStart: isBoth ? 'triangle' : 'none',
-            arrowEnd: isArrow ? 'triangle' : 'none',
-            style: isDouble ? 'double' : (isDashed ? 'dashed' : 'solid')
-          });
+    // Read one node reference at the start of s: id plus optional shape
+    function readNode(s) {
+      const m = s.match(ID_RE);
+      if (!m) return null;
+      const id = m[1];
+      let rest = s.slice(m[0].length);
+      const node = touch(id);
+      // Of the shapes whose opener matches, the one that closes first wins
+      // ([/a/] is a parallelogram even if a later node uses \]); quoted
+      // text may contain brackets
+      let pick = null;
+      for (const [open, close, type] of MERMAID_SHAPES) {
+        if (!rest.startsWith(open)) continue;
+        let i = open.length;
+        if (rest[i] === '"') {
+          const q = rest.indexOf('"', i + 1);
+          if (q < 0) continue;
+          i = q + 1;
         }
-        continue;
+        const end = rest.indexOf(close, i);
+        if (end < 0) continue;
+        if (!pick || end < pick.end || (end === pick.end && open.length > pick.open.length)) {
+          pick = { open, close, type, end };
+        }
       }
-
-      // Standalone node line: A[My Node Text]
-      parseMermaidNode(line, nodeMap);
+      if (pick) {
+        node.text = cleanMermaidText(rest.slice(pick.open.length, pick.end)) || id;
+        node.type = pick.type;
+        rest = rest.slice(pick.end + pick.close.length);
+      }
+      rest = rest.replace(/^:::[A-Za-z0-9_-]+/, '');
+      return { ids: [id], rest };
     }
 
-    function parseMermaidNode(part, map) {
-      if (!part) return null;
-      part = part.trim();
-
-      // Database: id[(Text)]
-      let m = part.match(/^([a-zA-Z0-9_-]+)\[\((.*?)\)\]$/);
-      if (m) {
-        const node = { id: m[1], text: m[2] || m[1], type: 'database' };
-        map.set(node.id, node);
-        return node;
+    // A group of nodes joined with &
+    function readNodes(s) {
+      const first = readNode(s);
+      if (!first) return null;
+      const ids = [...first.ids];
+      let rest = first.rest;
+      for (;;) {
+        const amp = rest.match(/^\s*&\s*/);
+        if (!amp) break;
+        const next = readNode(rest.slice(amp[0].length));
+        if (!next) break;
+        ids.push(...next.ids);
+        rest = next.rest;
       }
+      return { ids, rest };
+    }
 
-      // Rounded: id(Text)
-      m = part.match(/^([a-zA-Z0-9_-]+)\((.*?)\)$/);
+    function readEdge(s) {
+      let m = s.match(EDGE_TEXT_RE);
       if (m) {
-        const node = { id: m[1], text: m[2] || m[1], type: 'rounded-rectangle' };
-        map.set(node.id, node);
-        return node;
+        return { start: m[1], body: m[2] + m[4], end: m[5], label: cleanMermaidText(m[3]), rest: s.slice(m[0].length) };
       }
-
-      // Diamond: id{Text}
-      m = part.match(/^([a-zA-Z0-9_-]+)\{(.*?)\}$/);
+      m = s.match(EDGE_RE);
       if (m) {
-        const node = { id: m[1], text: m[2] || m[1], type: 'diamond' };
-        map.set(node.id, node);
-        return node;
+        return { start: m[1], body: m[2], end: m[3], label: m[4] ? cleanMermaidText(m[4]) : '', rest: s.slice(m[0].length) };
       }
-
-      // Rectangle: id[Text]
-      m = part.match(/^([a-zA-Z0-9_-]+)\[(.*?)\]$/);
-      if (m) {
-        const node = { id: m[1], text: m[2] || m[1], type: 'rectangle' };
-        map.set(node.id, node);
-        return node;
-      }
-
-      // Plain ID without brackets
-      m = part.match(/^([a-zA-Z0-9_-]+)$/);
-      if (m) {
-        const id = m[1];
-        if (!map.has(id)) {
-          map.set(id, { id, text: id, type: 'rectangle' });
-        }
-        return map.get(id);
-      }
-
       return null;
     }
 
-    // Layout nodes into clean coordinates (DAG rank ordering)
-    const nodes = Array.from(nodeMap.values());
-    if (nodes.length === 0) {
-      return { version: 1, name: 'Empty Mermaid', mode: 'unicode', shapes: [], connectors: [], texts: [], notes: [] };
+    const TERMINAL = { '>': 'triangle', '<': 'triangle', 'o': 'dot', 'x': 'bar' };
+
+    for (const st of statements) {
+      let m;
+      if ((m = st.match(/^(?:graph|flowchart)\b\s*(TB|TD|BT|LR|RL)?/i))) {
+        direction = (m[1] || 'TB').toUpperCase();
+        if (direction === 'TD') direction = 'TB';
+        continue;
+      }
+      if ((m = st.match(/^subgraph\s+(.*)$/i))) {
+        // subgraph id [Title] | subgraph "Title" | subgraph Title words
+        const spec = m[1].trim();
+        let id, title;
+        const withTitle = spec.match(/^([A-Za-z0-9_.-]+)\s*\[(.*)\]$/);
+        if (withTitle) { id = withTitle[1]; title = cleanMermaidText(withTitle[2]); }
+        else if (/^[A-Za-z0-9_.-]+$/.test(spec)) { id = spec; title = spec; }
+        else { title = cleanMermaidText(spec); id = `subgraph_${groups.length + 1}`; }
+        groups.push({ id, title, parent: groupStack.length ? groupStack[groupStack.length - 1] : null });
+        groupStack.push(id);
+        continue;
+      }
+      if (/^end$/i.test(st)) { groupStack.pop(); continue; }
+      if (/^(classDef|class|style|linkStyle|click|direction|accTitle|accDescr)\b/i.test(st)) continue;
+
+      // node (edge node)*
+      let left = readNodes(st);
+      if (!left) continue;
+      let rest = left.rest;
+      for (;;) {
+        const edge = readEdge(rest);
+        if (!edge) break;
+        const right = readNodes(edge.rest);
+        if (!right) break;
+        const style = edge.body.startsWith('=') ? 'double' : (edge.body.includes('.') ? 'dashed' : 'solid');
+        for (const from of left.ids) {
+          for (const to of right.ids) {
+            edges.push({
+              from, to, label: edge.label, style,
+              arrowStart: TERMINAL[edge.start] || 'none',
+              arrowEnd: TERMINAL[edge.end] || 'none'
+            });
+          }
+        }
+        left = right;
+        rest = right.rest;
+      }
     }
 
-    // Topological / BFS rank assignment
-    const ranks = new Map(); // id -> rank (0, 1, 2, ...)
-    const inDegree = new Map();
-    nodes.forEach(n => { inDegree.set(n.id, 0); ranks.set(n.id, 0); });
-
-    rawEdges.forEach(e => {
-      inDegree.set(e.to, (inDegree.get(e.to) || 0) + 1);
-    });
-
-    // BFS queue
-    const queue = [];
-    nodes.forEach(n => {
-      if (inDegree.get(n.id) === 0) queue.push(n.id);
-    });
-    if (queue.length === 0 && nodes.length > 0) queue.push(nodes[0].id);
-
-    while (queue.length > 0) {
-      const currId = queue.shift();
-      const currRank = ranks.get(currId) || 0;
-
-      rawEdges.filter(e => e.from === currId).forEach(e => {
-        const nextId = e.to;
-        const newRank = currRank + 1;
-        if (newRank > (ranks.get(nextId) || 0)) {
-          ranks.set(nextId, newRank);
-        }
-        inDegree.set(nextId, inDegree.get(nextId) - 1);
-        if (inDegree.get(nextId) === 0) {
-          queue.push(nextId);
-        }
-      });
+    // Edges may point at a subgraph: treat those as the container
+    const groupIds = new Set(groups.map(g => g.id));
+    for (const id of groupIds) {
+      if (nodeMap.has(id) && !edges.some(e => e.from === id || e.to === id)) continue;
+      if (nodeMap.has(id)) { nodeMap.delete(id); order.splice(order.indexOf(id), 1); }
     }
 
-    // Group nodes by rank
-    const maxRank = Math.max(0, ...Array.from(ranks.values()));
-    const levels = Array.from({ length: maxRank + 1 }, () => []);
+    const nodes = order.map(id => nodeMap.get(id));
+    if (nodes.length === 0) return empty('Empty Mermaid');
+
+    // --- Rank nodes (longest path from sources, cycles broken) -------------
+    const ranks = new Map(nodes.map(n => [n.id, 0]));
+    const nodeEdges = edges.filter(e => nodeMap.has(e.from) && nodeMap.has(e.to) && e.from !== e.to);
+    const inDegree = new Map(nodes.map(n => [n.id, 0]));
+    nodeEdges.forEach(e => inDegree.set(e.to, inDegree.get(e.to) + 1));
+    const queue = nodes.filter(n => inDegree.get(n.id) === 0).map(n => n.id);
+    const done = new Set();
+    for (;;) {
+      while (queue.length) {
+        const id = queue.shift();
+        done.add(id);
+        for (const e of nodeEdges) {
+          if (e.from !== id || done.has(e.to)) continue;
+          ranks.set(e.to, Math.max(ranks.get(e.to), ranks.get(id) + 1));
+          inDegree.set(e.to, inDegree.get(e.to) - 1);
+          if (inDegree.get(e.to) === 0) queue.push(e.to);
+        }
+      }
+      // A cycle: start again from the first node not yet placed
+      const next = nodes.find(n => !done.has(n.id));
+      if (!next) break;
+      inDegree.set(next.id, 0);
+      queue.push(next.id);
+    }
+
+    // --- Size nodes --------------------------------------------------------
+    for (const n of nodes) {
+      const lines = String(n.text).split('\n');
+      const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
+      let w = Math.max(14, Math.min(34, longest + 6));
+      let h = Math.max(5, lines.length + 4);
+      if (n.type === 'diamond') { w += 6; h = Math.max(7, lines.length + 6); }
+      else if (n.type === 'hexagon' || n.type === 'parallelogram' || n.type === 'triangle') w += 4;
+      else if (n.type === 'circle') w += 2;
+      else if (n.type === 'database') h += 1;
+      else if (n.type === 'queue') w += 6;
+      if (n.type === 'triangle') h = Math.max(6, lines.length + 4);
+      n.w = w;
+      n.h = h;
+    }
+
+    // --- Lay out ---------------------------------------------------------
+    // Ranks run along the flow (down for TB, right for LR). Across the flow
+    // each rank fills up from the same edge; a subgraph claims a rectangle
+    // over the ranks it covers, so it only pushes aside nodes at those ranks
+    const isHorizontal = direction === 'LR' || direction === 'RL';
+    const reverse = direction === 'BT' || direction === 'RL';
+    const maxRank = Math.max(0, ...ranks.values());
+    const childrenOf = (parent) => groups.filter(g => g.parent === parent);
+    const PAD = 2;
+    const ACROSS = isHorizontal ? 3 : 4; // gap between neighbours within a rank
+    const ALONG = isHorizontal ? 8 : 4;  // gap between ranks
+
+    const rankSize = Array(maxRank + 1).fill(0);
     nodes.forEach(n => {
-      const r = ranks.get(n.id) || 0;
-      levels[r].push(n);
+      const r = ranks.get(n.id);
+      rankSize[r] = Math.max(rankSize[r], isHorizontal ? n.w : n.h);
+    });
+    const descendants = (gid) => nodes.filter(n => {
+      for (let g = n.group; g; g = (groups.find(x => x.id === g) || {}).parent) if (g === gid) return true;
+      return false;
     });
 
-    const isLR = direction === 'LR';
+    // Room for container borders and titles only next to the ranks where a
+    // subgraph starts or ends (more for nested ones)
+    const before = Array(maxRank + 1).fill(0);
+    const after = Array(maxRank + 1).fill(0);
+    for (const g of groups) {
+      const inside = descendants(g.id).map(n => ranks.get(n.id));
+      if (!inside.length) continue;
+      const lo = Math.min(...inside), hi = Math.max(...inside);
+      const [first, last] = reverse ? [hi, lo] : [lo, hi];
+      before[first] += PAD + 2;
+      after[last] += PAD + 1;
+    }
+    const rankStart = [];
+    let pos = 3;
+    for (let r = 0; r <= maxRank; r++) {
+      const rr = reverse ? maxRank - r : r;
+      pos += before[rr];
+      rankStart[rr] = pos;
+      pos += rankSize[rr] + ALONG + after[rr];
+    }
     const shapes = [];
-    const colSpacing = isLR ? 28 : 22;
-    const rowSpacing = isLR ? 8 : 7;
-    const startX = 4;
-    const startY = 3;
+    const containers = [];
+    const sizeAcross = (s) => (isHorizontal ? s.h : s.w);
+    const farEdge = (s) => (isHorizontal ? s.y + s.h - 1 : s.x + s.w - 1);
 
-    levels.forEach((levelNodes, levelIdx) => {
-      levelNodes.forEach((node, nodeIdx) => {
-        const w = Math.max(16, Math.min(26, (node.text || '').length + 6));
-        const h = node.type === 'diamond' ? 7 : (node.type === 'database' ? 6 : 5);
+    function layoutGroup(gid, fill) {
+      let local = fill;
+      let r0 = 0, r1 = maxRank;
+      if (gid !== null) {
+        const inside = descendants(gid);
+        if (!inside.length) return;
+        r0 = Math.min(...inside.map(n => ranks.get(n.id)));
+        r1 = Math.max(...inside.map(n => ranks.get(n.id)));
+        const start = Math.max(...fill.slice(r0, r1 + 1)) + PAD + 2;
+        local = fill.map(() => start);
+      }
+      const placed = [];
+      for (const child of childrenOf(gid)) {
+        const box = layoutGroup(child.id, local);
+        if (box) placed.push(box);
+      }
+      for (const n of nodes.filter(m => m.group === gid)) {
+        const r = ranks.get(n.id);
+        const a = local[r];
+        const along = rankStart[r] + Math.floor((rankSize[r] - (isHorizontal ? n.w : n.h)) / 2);
+        const shape = {
+          id: n.id, type: n.type,
+          x: isHorizontal ? along : a,
+          y: isHorizontal ? a : along,
+          w: n.w, h: n.h, text: n.text, textAlign: 'center'
+        };
+        shapes.push(shape);
+        placed.push(shape);
+        local[r] = a + sizeAcross(shape) + ACROSS;
+      }
+      if (gid === null) return null;
 
-        let x, y;
-        if (isLR) {
-          x = startX + levelIdx * colSpacing;
-          y = startY + nodeIdx * rowSpacing;
-        } else {
-          x = startX + nodeIdx * colSpacing;
-          y = startY + levelIdx * rowSpacing;
-        }
-
-        shapes.push({
-          id: node.id,
-          type: node.type,
-          x,
-          y,
-          w,
-          h,
-          text: node.text,
-          textAlign: 'center'
-        });
-      });
-    });
-
-    // Create connectors
-    const connectors = rawEdges.map((e, idx) => {
-      return {
-        id: `conn_${idx + 1}`,
-        type: 'connector',
-        fromShapeId: e.from,
-        toShapeId: e.to,
-        fromAnchor: isLR ? 'right' : 'bottom',
-        toAnchor: isLR ? 'left' : 'top',
-        label: e.label || '',
-        arrowStart: e.arrowStart || 'none',
-        arrowEnd: e.arrowEnd || 'end',
-        style: e.style || 'solid'
+      // The container around everything placed inside it
+      const g = groups.find(x => x.id === gid);
+      const x0 = Math.min(...placed.map(s => s.x)) - PAD;
+      const y0 = Math.min(...placed.map(s => s.y)) - PAD - 1;
+      const x1 = Math.max(...placed.map(s => s.x + s.w - 1)) + PAD;
+      const y1 = Math.max(...placed.map(s => s.y + s.h - 1)) + PAD;
+      const box = {
+        id: gid, type: 'container', x: x0, y: y0,
+        w: Math.max(x1 - x0 + 1, String(g.title).length + 8), h: y1 - y0 + 1,
+        text: g.title, textAlign: 'left'
       };
-    });
+      containers.push(box);
+      for (let r = r0; r <= r1; r++) fill[r] = farEdge(box) + 1 + ACROSS;
+      return box;
+    }
+    layoutGroup(null, Array(maxRank + 1).fill(4));
+
+    // Connectors: along the flow use the matching sides, anything else auto
+    const SIDES = { TB: ['bottom', 'top'], BT: ['top', 'bottom'], LR: ['right', 'left'], RL: ['left', 'right'] };
+    const [fromSide, toSide] = SIDES[direction] || SIDES.TB;
+    const allIds = new Set([...shapes.map(s => s.id), ...containers.map(c => c.id)]);
+    const connectors = edges
+      .filter(e => allIds.has(e.from) && allIds.has(e.to) && e.from !== e.to)
+      .map((e, i) => {
+        const forward = nodeMap.has(e.from) && nodeMap.has(e.to) && ranks.get(e.to) > ranks.get(e.from);
+        const conn = {
+          id: `conn_${i + 1}`,
+          type: 'connector',
+          fromShapeId: e.from,
+          toShapeId: e.to,
+          fromAnchor: forward ? fromSide : 'auto',
+          toAnchor: forward ? toSide : 'auto',
+          arrowStart: e.arrowStart,
+          arrowEnd: e.arrowEnd,
+          style: e.style
+        };
+        if (e.label) conn.label = e.label;
+        return conn;
+      });
 
     return {
       version: 1,
       name: 'Imported Mermaid Flowchart',
       mode: 'unicode',
-      shapes,
+      // Outer containers first, so nested ones draw on top of them
+      shapes: [...containers.reverse(), ...shapes],
       connectors,
       texts: [],
       notes: []
     };
   }
 
+  /**
+   * Export a diagram as a Mermaid flowchart. Containers become subgraphs
+   * holding the shapes inside them; notes and free text become comments;
+   * connectors with a loose end are left out (Mermaid edges need two nodes).
+   */
+  function diagramToMermaid(diagram) {
+    const shapes = [...(diagram.shapes || []), ...(diagram.notes || [])];
+    const used = new Set();
+    const ids = new Map();
+    for (const s of shapes) {
+      let base = String(s.id || 'node').replace(/[^A-Za-z0-9_]/g, '_');
+      if (!/^[A-Za-z_]/.test(base)) base = `n_${base}`;
+      // Keywords Mermaid would misread as node ids
+      if (/^(end|graph|flowchart|subgraph|style|class|classDef|click|linkStyle|direction)$/i.test(base)) base = `${base}_node`;
+      let id = base;
+      for (let k = 2; used.has(id); k++) id = `${base}_${k}`;
+      used.add(id);
+      ids.set(s.id, id);
+    }
+
+    const label = (text) => {
+      const t = String(text || '').trim().replace(/"/g, '#quot;').replace(/\n/g, '<br>');
+      return `"${t}"`;
+    };
+    const nodeLine = (s) => {
+      const [open, close] = MERMAID_BRACKETS[s.type] || MERMAID_BRACKETS.rectangle;
+      return `${ids.get(s.id)}${open}${label(s.text || s.id)}${close}`;
+    };
+
+    // Flow direction: whichever way most attached connectors run
+    let horizontal = 0, vertical = 0;
+    for (const c of diagram.connectors || []) {
+      for (const a of [c.fromAnchor, c.toAnchor]) {
+        if (a === 'left' || a === 'right') horizontal++;
+        if (a === 'top' || a === 'bottom') vertical++;
+      }
+    }
+    const lines = [`flowchart ${horizontal > vertical ? 'LR' : 'TD'}`];
+
+    // Nest shapes in the smallest container that holds them
+    const containers = shapes.filter(s => s.type === 'container');
+    const inside = (s, c) => s !== c && s.x >= c.x && s.y >= c.y && s.x + s.w <= c.x + c.w && s.y + s.h <= c.y + c.h;
+    const parentOf = new Map();
+    for (const s of shapes) {
+      const holders = containers.filter(c => inside(s, c)).sort((a, b) => a.w * a.h - b.w * b.h);
+      parentOf.set(s, holders[0] || null);
+    }
+    const emit = (parent, indent) => {
+      for (const s of shapes) {
+        if (parentOf.get(s) !== parent) continue;
+        if (s.type === 'container') {
+          lines.push(`${indent}subgraph ${ids.get(s.id)}[${label(s.text || s.id)}]`);
+          emit(s, indent + '  ');
+          lines.push(`${indent}end`);
+        } else if (s.type === 'note') {
+          lines.push(`${indent}%% note: ${String(s.text || '').replace(/\n/g, ' ')}`);
+        } else {
+          lines.push(indent + nodeLine(s));
+        }
+      }
+    };
+    emit(null, '  ');
+
+    const ARROW = { triangle: '>', open: '>', dot: 'o', bar: 'x', diamond: '>' };
+    for (const c of diagram.connectors || []) {
+      const from = ids.get(c.fromShapeId);
+      const to = ids.get(c.toShapeId);
+      const fromShape = shapes.find(s => s.id === c.fromShapeId);
+      const toShape = shapes.find(s => s.id === c.toShapeId);
+      if (!from || !to || fromShape.type === 'note' || toShape.type === 'note') {
+        lines.push(`  %% connector ${c.id || ''} has a loose end and is not exported`);
+        continue;
+      }
+      let arrowEnd = c.arrowEnd === undefined ? 'triangle' : c.arrowEnd;
+      if (arrowEnd === 'end' || arrowEnd === 'both') arrowEnd = 'triangle';
+      const arrowStart = c.arrowEnd === 'both' ? 'triangle' : (c.arrowStart || 'none');
+      const start = arrowStart !== 'none' ? (ARROW[arrowStart] === '>' ? '<' : ARROW[arrowStart]) : '';
+      const end = arrowEnd !== 'none' ? ARROW[arrowEnd] || '>' : '';
+      let body;
+      if (c.style === 'double') body = end || start ? '==' : '===';
+      else if (c.style === 'dashed' || c.style === 'dotted') body = end || start ? '-.-' : '-.-';
+      else body = end || start ? '--' : '---';
+      const text = c.label ? `|${label(c.label)}|` : '';
+      lines.push(`  ${from} ${start}${body}${end}${text} ${to}`);
+    }
+
+    for (const t of diagram.texts || []) {
+      lines.push(`  %% text: ${String(t.text || '').replace(/\n/g, ' ')}`);
+    }
+    return lines.join('\n') + '\n';
+  }
+
   // Export to global
   global.AsciiParser = {
     parseAsciiToDiagram,
-    parseMermaidToDiagram
+    parseMermaidToDiagram,
+    diagramToMermaid
   };
 
 })(typeof window !== 'undefined' ? window : this);

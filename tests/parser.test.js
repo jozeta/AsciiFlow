@@ -294,3 +294,139 @@ test('text outside shapes is kept as text items', () => {
   ].join('\n'));
   assert.deepEqual(d.texts.map(t => [t.x, t.y, t.text]), [[0, 0, 'Legend: dashed = async']]);
 });
+
+// --- Mermaid ------------------------------------------------------------------
+
+const mermaid = (text) => plain(AsciiParser.parseMermaidToDiagram(text));
+const typeOf = (d) => Object.fromEntries(d.shapes.map(s => [s.id, s.type]));
+
+test('mermaid: every flowchart node shape maps to a shape type', () => {
+  const d = mermaid([
+    'flowchart TD',
+    'a[Rect] --> b(Round) --> c([Stadium]) --> d[[Sub]] --> e[(DB)]',
+    'e --> f((Circle)) --> g{Choice} --> h{{Hex}} --> i[/In/] --> j[/Trap\\]',
+    'j --> k>Flag]'
+  ].join('\n'));
+  assert.deepEqual(typeOf(d), {
+    a: 'rectangle', b: 'rounded-rectangle', c: 'rounded-rectangle', d: 'queue', e: 'database',
+    f: 'circle', g: 'diamond', h: 'hexagon', i: 'parallelogram', j: 'triangle', k: 'rectangle'
+  });
+  assert.equal(d.connectors.length, 10, 'chains create one edge per hop');
+});
+
+test('mermaid: edge styles, ends, both label forms, & groups and quoted text', () => {
+  const d = mermaid([
+    'graph LR; A["Say \\"hi\\"<br>twice"] -.-> B',
+    'B ==> C',
+    'C -- writes --> D',
+    'D -->|reads| E',
+    'E --o F & G',
+    'G <--> H',
+    'H --- I',
+    'classDef hot fill:#f00',
+    'class I hot'
+  ].join('\n'));
+  const edge = (from, to) => d.connectors.find(c => c.fromShapeId === from && c.toShapeId === to);
+  assert.equal(edge('A', 'B').style, 'dashed');
+  assert.equal(edge('B', 'C').style, 'double');
+  assert.equal(edge('C', 'D').label, 'writes');
+  assert.equal(edge('D', 'E').label, 'reads');
+  assert.equal(edge('E', 'F').arrowEnd, 'dot');
+  assert.equal(edge('E', 'G').arrowEnd, 'dot');
+  assert.deepEqual([edge('G', 'H').arrowStart, edge('G', 'H').arrowEnd], ['triangle', 'triangle']);
+  assert.deepEqual([edge('H', 'I').arrowStart, edge('H', 'I').arrowEnd], ['none', 'none']);
+  assert.equal(d.shapes.find(s => s.id === 'A').text, 'Say \\"hi\\"\ntwice');
+  // LR: edges run left to right
+  assert.deepEqual([edge('B', 'C').fromAnchor, edge('B', 'C').toAnchor], ['right', 'left']);
+});
+
+test('mermaid: subgraphs become containers around their nodes, nested too', () => {
+  const d = mermaid([
+    'flowchart TD',
+    'subgraph outer [Outer]',
+    '  subgraph inner [Inner]',
+    '    E[E1]',
+    '  end',
+    '  F[F1]',
+    'end',
+    'A --> E & F',
+    'G[Outside]'
+  ].join('\n'));
+  const byId = Object.fromEntries(d.shapes.map(s => [s.id, s]));
+  const within = (s, c) => s.x > c.x && s.y > c.y && s.x + s.w < c.x + c.w && s.y + s.h < c.y + c.h;
+  assert.equal(byId.outer.type, 'container');
+  assert.equal(byId.outer.text, 'Outer');
+  assert.ok(within(byId.inner, byId.outer));
+  assert.ok(within(byId.E, byId.inner));
+  assert.ok(within(byId.F, byId.outer) && !within(byId.F, byId.inner));
+  for (const id of ['A', 'G']) assert.ok(!within(byId[id], byId.outer), `${id} is outside`);
+});
+
+test('mermaid: BT and RL flip the flow, cycles still lay out', () => {
+  const bt = mermaid('graph BT\nA --> B --> C --> A');
+  const y = Object.fromEntries(bt.shapes.map(s => [s.id, s.y]));
+  assert.ok(y.A > y.B && y.B > y.C, 'BT stacks upwards');
+  const rl = mermaid('flowchart RL\nA --> B');
+  const x = Object.fromEntries(rl.shapes.map(s => [s.id, s.x]));
+  assert.ok(x.A > x.B, 'RL runs right to left');
+});
+
+test('mermaid: exported templates import back with the same shapes, edges and labels', () => {
+  const summary = (d) => plain(d.shapes).filter(s => s.type !== 'note')
+    .map(s => `${s.type === 'cloud' ? 'rounded-rectangle' : s.type}:${s.text}`).sort();
+  const edges = (d) => plain(d.connectors).map(c => `${c.label || ''}/${c.style || 'solid'}`).sort();
+  for (const key of Object.keys(SAMPLE_TEMPLATES)) {
+    const src = AsciiStorage.getSample(key);
+    const text = AsciiParser.diagramToMermaid(src);
+    assert.match(text, /^flowchart (TD|LR)\n/);
+    const back = mermaid(text);
+    assert.deepEqual(summary(back), summary(src), key);
+    assert.deepEqual(edges(back), edges(src), key);
+  }
+});
+
+test('mermaid export: containers become subgraphs, odd ids are made safe', () => {
+  const text = AsciiParser.diagramToMermaid({
+    shapes: [
+      { id: 'vpc', type: 'container', x: 0, y: 0, w: 40, h: 12, text: 'VPC' },
+      { id: 'end', type: 'rectangle', x: 4, y: 3, w: 12, h: 5, text: 'Say "hi"' },
+      { id: '9 lives', type: 'circle', x: 60, y: 3, w: 12, h: 5, text: 'Cat' }
+    ],
+    connectors: [{ id: 'c', fromShapeId: 'end', toShapeId: '9 lives', arrowEnd: 'triangle', style: 'dashed' }]
+  });
+  assert.match(text, /subgraph vpc\["VPC"\]\n {4}end_node\["Say #quot;hi#quot;"\]\n {2}end/);
+  assert.match(text, /n_9_lives\(\("Cat"\)\)/);
+  assert.match(text, /end_node -\.-> n_9_lives/);
+  const back = mermaid(text);
+  assert.equal(back.shapes.find(s => s.id === 'end_node').text, 'Say "hi"');
+});
+
+// --- Messier layouts -------------------------------------------------------------
+
+test('arrowless connectors and diamond tips survive a round trip', () => {
+  const box = (id, x, y, w, h) => ({ id, type: 'rectangle', x, y, w, h, text: id });
+  const diamond = (id, x, y, w, h) => ({ id, type: 'diamond', x, y, w, h, text: id });
+  const cases = [
+    // A connector ending on a diamond's < tip, and one routed around a box
+    { shapes: [box('N0', 10, 12, 10, 7), diamond('N1', 36, 12, 10, 7), box('N2', 28, 4, 10, 5)],
+      connectors: [
+        { id: 'c0', fromShapeId: 'N1', toShapeId: 'N0', fromAnchor: 'auto', toAnchor: 'top', arrowEnd: 'none' },
+        { id: 'c2', fromShapeId: 'N0', toShapeId: 'N1', fromAnchor: 'auto', toAnchor: 'left', arrowEnd: 'none' }
+      ] },
+    // A labelled arrowless connector leaving a box and ending under a diamond's v tip
+    { shapes: [box('N0', 14, 28, 10, 6), { id: 'N1', type: 'database', x: 56, y: 26, w: 10, h: 6, text: 'N1' },
+      diamond('N2', 56, 4, 10, 5)],
+      connectors: [{ id: 'c0', fromShapeId: 'N0', toShapeId: 'N2', fromAnchor: 'left', toAnchor: 'bottom', arrowEnd: 'none', label: 'L0' }] }
+  ];
+  const r = new AsciiRenderer();
+  for (const [i, d] of cases.entries()) {
+    for (const mode of ['unicode', 'ascii']) {
+      r.setMode(mode);
+      const first = r.render({ ...d, texts: [], notes: [] });
+      assert.match(first, /</, `case ${i} ${mode}: the diamond tip is drawn`);
+      const back = parse(first);
+      assert.ok(back.connectors.every(c => c.fromShapeId && c.toShapeId), `case ${i} ${mode}: attached`);
+      assert.equal(r.render(back), first, `case ${i} ${mode}`);
+    }
+  }
+});

@@ -135,6 +135,7 @@
 
   function setupToolbar() {
     const toolButtons = document.querySelectorAll('.tool-btn');
+    syncPressedState(document.querySelectorAll('.tool-btn, .mode-btn, #btnTogglePreview'));
 
     toolButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -146,6 +147,19 @@
 
         canvas.setTool(tool);
       });
+    });
+  }
+
+  /**
+   * Toggle buttons show their state with an "active" class, set from several
+   * places; mirror it into aria-pressed so screen readers announce it too.
+   */
+  function syncPressedState(buttons) {
+    const sync = (btn) => btn.setAttribute('aria-pressed', btn.classList.contains('active') ? 'true' : 'false');
+    const observer = new MutationObserver((records) => records.forEach(r => sync(r.target)));
+    buttons.forEach((btn) => {
+      sync(btn);
+      observer.observe(btn, { attributes: true, attributeFilter: ['class'] });
     });
   }
 
@@ -236,6 +250,18 @@
       btnCopyMarkdown.addEventListener('click', async () => {
         const ok = await window.AsciiStorage.copyMarkdownCodeBlock(canvas.diagram, canvas.renderer);
         if (ok) showToast('Markdown code block copied to clipboard');
+        else showToast('Failed to copy to clipboard', 'error');
+      });
+    }
+
+    // Copy as Mermaid
+    const btnCopyMermaid = document.getElementById('btnCopyMermaid');
+    if (btnCopyMermaid) {
+      btnCopyMermaid.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const mermaid = window.AsciiParser.diagramToMermaid(canvas.diagram);
+        const ok = await window.AsciiStorage.copyToClipboard(mermaid);
+        if (ok) showToast('Mermaid flowchart copied to clipboard');
         else showToast('Failed to copy to clipboard', 'error');
       });
     }

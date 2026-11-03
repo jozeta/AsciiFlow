@@ -10,3 +10,9 @@
 *.key
 *.p12
 *.pfx
+
+# --- Test tooling ---
+node_modules/
+test-results/
+playwright-report/
+.playwright-mcp/

@@ -6,6 +6,19 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Mermaid: import every flowchart node shape, edge style and end (`o`, `x`), both label forms,
+  chains and `&` groups, `BT`/`RL`, subgraphs (as containers, nested too) and ignore styling
+  lines; new **Copy as Mermaid Flowchart** export
+- Browser tests (Playwright) for the real app in CI, including a WCAG 2.1 A/AA check with
+  axe-core in both themes and every dialog
+- Accessibility: readable contrast in both themes (dark dialogs were nearly unreadable), named
+  property controls, `aria-pressed` on toggle buttons, a keyboard-focusable and labelled ASCII
+  preview, and a labelled canvas
+- Fix undo after redo doing nothing (a fresh `updatedAt` stamp looked like an unsaved change)
+- Routing: a standard route is only kept when it really enters the target from the right side,
+  a re-routed connector leaves its shape straight out, and lines no longer erase a diamond's tip
+- ASCII import: corner ends attach to the shape they bend into, and arrowless connectors keep
+  their direction when one end leaves a box through a junction
 - Connectors no longer run through other shapes: when the standard route would cross one, a
   route around it is found (trying other sides for auto anchors and avoiding sides other
   connectors already use); routes that were already clear are unchanged

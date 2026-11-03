@@ -18,8 +18,15 @@ python3 -m http.server 8000      # then open http://localhost:8000/
 Opening `index.html` directly also works.
 
 ```sh
-node --test tests/*.test.js               # Node 18+, no dependencies
+node --test tests/*.test.js               # unit tests: Node 18+, nothing to install
+npm ci && npx playwright install chromium # once, for the browser tests
+npx playwright test                       # browser tests (tests/e2e), serves the app on :8123
 ```
+
+`package.json` holds test tooling only (Playwright, axe-core); the app itself stays
+dependency-free and is never built. In browser tests use `ControlOrMeta` for shortcuts (the app
+uses Cmd on macOS), and start from `about:blank` before opening a `#diagram=` link, or the page
+will not reload. `tests/e2e/accessibility.spec.js` fails on any new WCAG A/AA violation.
 
 The tests load the browser scripts into a `vm` context (`tests/helpers.js`) and cover the
 renderer (both modes), ASCII/Mermaid import and `normalizeDiagram()` validation. Wrap vm results
@@ -37,6 +44,13 @@ changes in the browser (draw, connect, export, re-import).
   bounding box), labels beside a line are attached to it, and leftover words become `texts`.
   The template round-trip tests require an identical re-render: if you change how the renderer
   draws a shape, junction or label, keep them passing.
+- **Mermaid** (`parseMermaidToDiagram` / `diagramToMermaid` in `js/parser.js`): statements split
+  on newlines and `;` (not inside quotes or `#quot;`), node shapes from `MERMAID_SHAPES` (the
+  opener whose closer comes first wins), edges with `EDGE_RE`/`EDGE_TEXT_RE`. Layout ranks nodes
+  along the flow and packs each rank from one edge; a subgraph claims a rectangle over the ranks
+  it covers. Exported text must import back to the same shapes, edges and labels (tested).
+- **Theme:** `theme.js` sets both `data-theme` (app tokens in `css/app.css`) and `data-bs-theme`
+  (Bootstrap's own colours); keep new UI readable in both, the axe test checks contrast.
 - **Undo history:** the canvas records a snapshot after every change, so the top of the undo
   stack is the current state and `undo()` returns the entry below it. `loadDiagram(data,
   { undoable: true })` replaces the diagram as one undo step (New, Templates); without it,

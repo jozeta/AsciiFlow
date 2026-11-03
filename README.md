@@ -14,7 +14,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 
 - **Bidirectional Text & Code Import**:
   - **ASCII Reverse Engineering**: Paste raw ASCII / Unicode text diagrams. AsciiFlow turns them back into editable shapes: every shape type it can draw (rectangles, rounded boxes, circles, diamonds, parallelograms, hexagons, triangles, databases, clouds, queues, notes and titled containers with the shapes nested inside them), plus connectors traced around corners, through crossings and across junctions where they split or merge, attached to the shapes they touch, with their arrowheads and labels. Any other text becomes free text labels. A diagram copied out of AsciiFlow re-imports to the same diagram.
-  - **Mermaid Flowchart Import**: Paste Mermaid `graph TD` or `graph LR` syntax. Nodes, shapes, edge types, and labels are automatically parsed and arranged hierarchically with auto-layout!
+  - **Mermaid Flowchart Import & Export**: Paste a Mermaid flowchart (`graph`/`flowchart`, any direction). Every node shape, edge style and label, `&` groups, chains and subgraphs (as containers) are parsed and laid out automatically. **Copy as Mermaid Flowchart** turns any diagram back into Mermaid.
   - **Shareable URL Hash**: Generate instant shareable links with the diagram data URL-encoded into `#diagram=...` for frictionless collaboration without a backend database.
 - **Smart Alignment & Auto-Layout**:
   - **Align Tools**: One-click alignment across multi-selections (Align Left, Center, Right, Top, Middle, Bottom).
@@ -36,6 +36,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
   - **Export as SVG**: Vector graphics with monospace font stacks and clean background containers.
   - **Export as PNG**: High-DPI rasterized PNG image download.
   - **Copy as Markdown**: Instant clipboard copy formatted as ```` ```text ... ``` ```` for documentation and PR descriptions.
+  - **Copy as Mermaid**: The diagram as a Mermaid flowchart (containers become subgraphs).
   - **Save as JSON**: Full diagram model persistence.
   - **Download ASCII (.txt)**: Plain text ASCII art file.
 
@@ -62,7 +63,8 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 ├── vendor/             # Self-hosted Bootstrap 5.3.3 and Bootstrap Icons 1.11.3 (MIT)
 ├── favicon.svg
 ├── .github/workflows/  # CI: syntax check and tests on every push and pull request
-├── tests/              # Node test suite (node --test tests/*.test.js)
+├── tests/              # Unit tests (node --test) and browser tests (tests/e2e, Playwright)
+├── package.json        # Test tooling only; the app has no dependencies
 └── docs/screenshots/   # README images
 ```
 
@@ -77,15 +79,32 @@ python3 -m http.server 8000      # then open http://localhost:8000/
 The app makes no third-party network requests: Bootstrap and its icon font are served from
 `vendor/`.
 
-The test suite uses Node's built-in test runner (Node 18 or newer, no dependencies). It loads the
-browser scripts in a `vm` sandbox and covers rendering in both modes, ASCII/Mermaid import and
-diagram validation:
+The unit tests use Node's built-in test runner (Node 18 or newer, nothing to install). They load
+the browser scripts in a `vm` sandbox and cover rendering, routing, ASCII and Mermaid import and
+export, diagram validation and undo history:
 
 ```sh
 node --test tests/*.test.js
 ```
 
-GitHub Actions runs the same tests on every push and pull request.
+The browser tests drive the real app in Chromium with Playwright: loading without third-party
+requests, undo/redo, imports, error toasts, hostile share links, selecting connectors, and a
+WCAG 2.1 A/AA check with axe-core in both themes and every dialog. They need the dev tooling:
+
+```sh
+npm ci && npx playwright install chromium
+npx playwright test
+```
+
+GitHub Actions runs both on every push and pull request.
+
+## Accessibility
+
+The interface passes automated WCAG 2.1 A/AA checks (axe-core) in the light and dark themes: text
+contrast, named controls, toggle buttons that announce their state (`aria-pressed`), and a
+keyboard-focusable ASCII preview that gives screen-reader users the whole diagram as text. Drawing
+itself is pointer-based; keyboard shortcuts (see Help) cover tools, selection, nudging, undo and
+clipboard.
 
 ## Security
 
