@@ -71,6 +71,14 @@ changes in the browser (draw, connect, export, re-import).
   with what is already there, so corners, T-junctions and crossings (including where a connector
   meets a straight shape border) come from `getLineGlyph()`. Junction names describe the stem:
   `t_down` is `┬`, `t_up` is `┴`.
+- **Routing around shapes:** a connector between two shapes keeps the standard route from
+  `calculateOptimalRouteInfo()` unless it runs through another shape (containers excluded);
+  then `routeAroundShapes()` searches the grid (uniform cost: length + turn penalty + a penalty
+  for a shape side another connector already uses, see `sidesInUse()`), trying every side for
+  `auto` anchors. For each pair of sides the clear, well-formed standard route is preferred, so
+  re-imported diagrams (explicit anchors) route identically. The canvas passes the diagram's
+  connectors and a shape map that includes notes (`AsciiCanvas.shapeMap()`), so hit-testing
+  follows the drawn routes.
 - **Labels are placed after all connectors are drawn** (`renderConnectorLabel`): on the line
   where only that connector's own straight line is covered and its line, junction or arrow stays
   visible on both sides; otherwise slid along the line, on another segment, or beside the line;

@@ -6,6 +6,10 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Connectors no longer run through other shapes: when the standard route would cross one, a
+  route around it is found (trying other sides for auto anchors and avoiding sides other
+  connectors already use); routes that were already clear are unchanged
+- Canvas hit-testing now uses the same routes as the drawing, including connectors to notes
 - Connector labels no longer hide arrowheads, junctions or each other: they are placed after
   all connectors are drawn, on the line where they fit and beside it where they don't
 - ASCII import recognises every shape type (adding hexagons, triangles, databases, clouds and

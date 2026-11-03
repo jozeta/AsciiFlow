@@ -1816,6 +1816,17 @@
     // Hit-Testing Helpers
     // ==========================================
 
+    /**
+     * Shapes and notes by id, the same set the renderer routes connectors
+     * around, so hit-testing follows the drawn routes
+     */
+    shapeMap() {
+      const map = new Map();
+      this.diagram.shapes.forEach(s => map.set(s.id, s));
+      (this.diagram.notes || []).forEach(n => map.set(n.id, n));
+      return map;
+    }
+
     findShapeById(id) {
       return this.diagram.shapes.find(s => s.id === id) ||
              (this.diagram.notes || []).find(n => n.id === id);
@@ -1833,12 +1844,11 @@
     }
 
     findConnectorAt(col, row) {
-      const shapeMap = new Map();
-      this.diagram.shapes.forEach(s => shapeMap.set(s.id, s));
+      const shapeMap = this.shapeMap();
 
       for (let i = this.diagram.connectors.length - 1; i >= 0; i--) {
         const conn = this.diagram.connectors[i];
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
         if (global.AsciiConnectors.hitTestConnector(conn, points, col, row, 1.0)) {
           return conn;
         }
@@ -1877,14 +1887,13 @@
     findConnectorEndpointAt(screenX, screenY, tolerance = 10) {
       const cellWPx = this.cellWidth * this.zoom;
       const cellHPx = this.cellHeight * this.zoom;
-      const shapeMap = new Map();
-      this.diagram.shapes.forEach(s => shapeMap.set(s.id, s));
+      const shapeMap = this.shapeMap();
 
       for (const id of this.selectedConnectorIds) {
         const conn = this.diagram.connectors.find(c => c.id === id);
         if (!conn) continue;
 
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
         if (!points || points.length < 2) continue;
 
         const pStart = points[0];
@@ -1930,14 +1939,13 @@
     findMidpointHandleAt(screenX, screenY, tolerance = 8) {
       const cellWPx = this.cellWidth * this.zoom;
       const cellHPx = this.cellHeight * this.zoom;
-      const shapeMap = new Map();
-      this.diagram.shapes.forEach(s => shapeMap.set(s.id, s));
+      const shapeMap = this.shapeMap();
 
       for (const id of this.selectedConnectorIds) {
         const conn = this.diagram.connectors.find(c => c.id === id);
         if (!conn) continue;
 
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
         if (!points || points.length < 2) continue;
 
         for (let i = 0; i < points.length - 1; i++) {
@@ -2030,9 +2038,8 @@
         return 0;
       }
 
-      const shapeMap = new Map();
-      this.diagram.shapes.forEach(s => shapeMap.set(s.id, s));
-      const routeInfo = this.renderer.resolveConnectorRouteInfo(conn, shapeMap);
+      const shapeMap = this.shapeMap();
+      const routeInfo = this.renderer.resolveConnectorRouteInfo(conn, shapeMap, this.diagram.connectors);
       const points = (routeInfo && routeInfo.points) ? routeInfo.points : [];
 
       if (points.length < 2) return conn.waypoints.length;
@@ -2194,8 +2201,7 @@
     drawSelectionOverlays(ctx, colors) {
       const cellWPx = this.cellWidth * this.zoom;
       const cellHPx = this.cellHeight * this.zoom;
-      const shapeMap = new Map();
-      this.diagram.shapes.forEach(s => shapeMap.set(s.id, s));
+      const shapeMap = this.shapeMap();
 
       // 0. Draw Magnetic Alignment Guides if active
       if (this.activeGuides && this.activeGuides.length > 0) {
@@ -2364,7 +2370,7 @@
         const conn = this.diagram.connectors.find(c => c.id === id);
         if (!conn) continue;
 
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
         if (!points || points.length < 2) continue;
 
         // Path outline
