@@ -100,7 +100,11 @@
     if (prefs.previewWidth && prefs.previewWidth >= 220) {
       previewPanel.style.width = `${prefs.previewWidth}px`;
     }
-    if (prefs.previewVisible === false) {
+    // On phones the preview would cover the whole canvas: start with it
+    // closed (without changing the saved preference); the toolbar button
+    // opens it as a full-width panel
+    const narrowScreen = window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+    if (prefs.previewVisible === false || narrowScreen) {
       previewPanel.classList.add('collapsed');
       if (btnTogglePreview) btnTogglePreview.classList.remove('active');
     } else {

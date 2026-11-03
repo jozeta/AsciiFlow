@@ -6,6 +6,12 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
+- Touch and pen support: the canvas uses pointer events, so shapes can be dragged with a finger,
+  double-tapped to edit, and the view pinched to zoom and panned with two fingers
+- Phones and tablets: the header wraps and turns icon-only instead of pushing buttons off
+  screen, the property bar wraps, the status bar fits one line, and on phones the preview starts
+  closed and opens full width
+- Fix Space+drag panning, which never worked (it read a Space flag mouse events do not have)
 - Draw without a mouse: Tab between shapes, add connected shapes with a shape key and Enter, edit
   text with Enter or F2, connect shapes with K, Tab, Enter; screen readers announce each step and
   Tab never gets trapped in the canvas. The new keys are listed under Help

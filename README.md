@@ -98,6 +98,13 @@ npx playwright test
 
 GitHub Actions runs both on every push and pull request.
 
+## Phones, tablets and pens
+
+The canvas uses pointer events, so mouse, pen and touch all work: drag shapes and connectors with
+a finger, double-tap to edit text, pinch to zoom and drag with two fingers to pan. On narrow
+screens the header wraps and turns icon-only, the property bar wraps, and on phones the ASCII
+preview starts closed and opens as a full-width panel.
+
 ## Accessibility
 
 The interface passes automated WCAG 2.1 A/AA checks (axe-core) in the light and dark themes: text
@@ -210,6 +217,8 @@ The rendering engine operates on a 2D discrete character grid:
 | `Arrow Keys` | Nudge selected shape(s) by 1 character cell |
 | `Shift + Arrow Keys` | Nudge selected shape(s) by 5 character cells |
 | `Space + Drag` (or Middle Click) | Pan canvas |
+| Pinch / two-finger drag | Zoom / pan on touch screens |
+| Double-tap | Edit shape text on touch screens |
 | `Ctrl / Cmd + Mouse Wheel` | Zoom in / out relative to cursor |
 | `Double Click` / `Enter` / `F2` | Edit shape text in-place (finish with `Ctrl + Enter`) |
 | `Tab` / `Shift + Tab` (canvas focused) | Select the next / previous shape |

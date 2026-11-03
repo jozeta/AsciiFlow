@@ -757,6 +757,15 @@ html, body {
     right: 12px;
     flex-wrap: wrap;
   }
+  /* The controls inside wrap too, instead of running off the edge */
+  .property-bar .prop-section,
+  .property-bar .prop-group {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .property-bar .prop-section {
+    max-width: 100%;
+  }
 }
 
 /* Accessibility: readable accents on the dark surfaces, and a visible
@@ -792,4 +801,82 @@ html, body {
 #editorCanvas:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: -2px;
+}
+
+/* Touch: the canvas handles its own drag, pinch and pan */
+#editorCanvas {
+  touch-action: none;
+}
+
+/* ---- Narrow screens (tablets and phones) ---- */
+@media (max-width: 1100px) {
+  /* The header wraps onto a second row instead of pushing buttons off
+     screen; button labels give way to their icons (names stay in title) */
+  .app-header {
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding: 6px 10px;
+  }
+  .header-left, .header-center, .header-right {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .app-header .btn-nordic > span {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand > span:not(.brand-icon) {
+    display: none;
+  }
+  .header-divider {
+    display: none;
+  }
+  /* All header buttons flow as one wrapping row */
+  .app-header {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .header-left, .header-center, .header-right {
+    display: contents;
+  }
+  /* The preview opens as a full-width panel over the canvas */
+  .preview-panel {
+    width: 100% !important;
+    max-width: 100%;
+  }
+  .preview-resizer {
+    display: none;
+  }
+  /* Keep the status bar to one line */
+  #cursorCoord,
+  #statusMode,
+  #btnGridToggle,
+  #btnZoomReset {
+    display: none;
+  }
+  .app-statusbar {
+    white-space: nowrap;
+    overflow: hidden;
+    padding: 0 8px;
+  }
+  .statusbar-left, .statusbar-center, .statusbar-right {
+    gap: 8px;
+  }
+}
+
+/* Short screens: the tool strip scrolls rather than running off the end */
+.app-toolbar {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Touch screens: the mouse-oriented hint does not apply */
+@media (pointer: coarse) {
+  .canvas-hint {
+    display: none;
+  }
 }

@@ -194,11 +194,22 @@
     bindEvents() {
       const c = this.canvas;
 
-      c.addEventListener('mousedown', (e) => this.onMouseDown(e));
-      window.addEventListener('mousemove', (e) => this.onMouseMove(e));
-      window.addEventListener('mouseup', (e) => this.onMouseUp(e));
+      // Pointer events cover mouse, pen and touch. One pointer drives the
+      // editor exactly like a mouse; two touches pinch-zoom and pan.
+      this.touches = new Map(); // pointerId -> { x, y }
+      this.pinch = null;
+      this.lastTap = null;
+      c.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+      window.addEventListener('pointermove', (e) => this.onPointerMove(e));
+      window.addEventListener('pointerup', (e) => this.onPointerUp(e));
+      window.addEventListener('pointercancel', (e) => this.onPointerUp(e, true));
       c.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
       c.addEventListener('dblclick', (e) => this.onDoubleClick(e));
+
+      // Space + drag pans (tracked here: mouse events carry no Space state)
+      this.spaceHeld = false;
+      window.addEventListener('keyup', (e) => { if (e.key === ' ') this.spaceHeld = false; });
+      window.addEventListener('blur', () => { this.spaceHeld = false; });
 
       // In-place text editor blur / keydown
       if (this.textEditor) {
@@ -217,7 +228,7 @@
     }
 
     onMouseDown(e) {
-      if (e.button === 1 || (e.button === 0 && (e.spaceKey || this.currentTool === 'pan'))) {
+      if (e.button === 1 || (e.button === 0 && (this.spaceHeld || this.currentTool === 'pan'))) {
         // Pan canvas
         this.isPanning = true;
         this.container.classList.add('tool-panning');
@@ -931,6 +942,96 @@
       }
     }
 
+    // ==========================================
+    // Pointer (mouse, pen, touch)
+    // ==========================================
+
+    onPointerDown(e) {
+      if (e.pointerType === 'touch') {
+        this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+        if (this.touches.size === 2) {
+          // A second finger: finish whatever the first one started, then pinch
+          if (this.activeTouch !== undefined) {
+            const first = this.touches.get(this.activeTouch);
+            this.onMouseUp({ clientX: first.x, clientY: first.y, button: 0, shiftKey: false });
+            this.activeTouch = undefined;
+          }
+          this.startPinch();
+          return;
+        }
+        if (this.touches.size > 2) return;
+        this.activeTouch = e.pointerId;
+        this.touchDownAt = { time: e.timeStamp, x: e.clientX, y: e.clientY };
+      } else {
+        try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+      }
+      this.onMouseDown(e);
+    }
+
+    onPointerMove(e) {
+      if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
+        this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (this.pinch) { this.updatePinch(); return; }
+        if (e.pointerId !== this.activeTouch) return;
+      }
+      this.onMouseMove(e);
+    }
+
+    onPointerUp(e, cancelled = false) {
+      if (e.pointerType === 'touch' && this.touches.has(e.pointerId)) {
+        this.touches.delete(e.pointerId);
+        if (this.pinch) {
+          if (this.touches.size < 2) this.pinch = null;
+          return;
+        }
+        if (e.pointerId !== this.activeTouch) return;
+        this.activeTouch = undefined;
+        this.onMouseUp(e);
+        // Double-tap edits text, like a double-click
+        const down = this.touchDownAt;
+        const isTap = !cancelled && down && e.timeStamp - down.time < 300 &&
+          Math.hypot(e.clientX - down.x, e.clientY - down.y) < 10;
+        if (isTap) {
+          const last = this.lastTap;
+          if (last && e.timeStamp - last.time < 400 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 24) {
+            this.lastTap = null;
+            this.onDoubleClick(e);
+          } else {
+            this.lastTap = { time: e.timeStamp, x: e.clientX, y: e.clientY };
+          }
+        }
+        return;
+      }
+      this.onMouseUp(e);
+    }
+
+    startPinch() {
+      const [a, b] = [...this.touches.values()];
+      const rect = this.canvas.getBoundingClientRect();
+      const mid = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
+      this.pinch = {
+        distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+        zoom: this.zoom,
+        // The diagram point under the fingers' midpoint stays under it
+        anchorX: (mid.x - this.panX) / this.zoom,
+        anchorY: (mid.y - this.panY) / this.zoom
+      };
+    }
+
+    updatePinch() {
+      const [a, b] = [...this.touches.values()];
+      if (!a || !b) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const mid = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
+      const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+      this.zoom = Math.min(this.maxZoom, Math.max(this.minZoom, this.pinch.zoom * distance / this.pinch.distance));
+      this.panX = mid.x - this.pinch.anchorX * this.zoom;
+      this.panY = mid.y - this.pinch.anchorY * this.zoom;
+      this.render();
+      this.emitZoomChange();
+    }
+
     onWheel(e) {
       e.preventDefault();
 
@@ -998,6 +1099,12 @@
       const target = e.target;
       if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
       if (document.querySelector('.modal.show')) return;
+
+      if (e.key === ' ' && !e.repeat) {
+        this.spaceHeld = true;
+        if (document.activeElement === this.canvas || document.activeElement === document.body) e.preventDefault();
+        return;
+      }
 
       if (this.handleKeyboardDrawing(e)) return;
 

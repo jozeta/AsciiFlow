@@ -56,6 +56,12 @@ changes in the browser (draw, connect, export, re-import).
   Tab); a shape tool + Enter adds a connected shape; Enter/F2 edit text; K, Tab, Enter connects.
   Status goes to the `#canvasAnnouncer` live region via `announce()`. Shortcuts are ignored while
   typing in inputs or with a dialog open; keep it that way for new shortcuts.
+- **Pointer input** (`onPointerDown/Move/Up` in `js/canvas.js`): one pointer of any kind is fed to
+  the existing `onMouse*` handlers; a second touch finishes the first finger's action and starts a
+  pinch (zoom about the fingers' midpoint, pan with them); double-tap calls `onDoubleClick`. The
+  canvas has `touch-action: none`. Space+drag panning reads `this.spaceHeld` (set in `onKeyDown`,
+  cleared on keyup/blur). `tests/e2e/touch.spec.js` drives real touch input through Chromium's
+  DevTools protocol at phone size.
 - **Undo history:** the canvas records a snapshot after every change, so the top of the undo
   stack is the current state and `undo()` returns the entry below it. `loadDiagram(data,
   { undoable: true })` replaces the diagram as one undo step (New, Templates); without it,

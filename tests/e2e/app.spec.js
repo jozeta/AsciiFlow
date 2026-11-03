@@ -184,3 +184,23 @@ test('Mermaid: import a flowchart with a subgraph, then copy it back out', async
   expect(copied).toContain('subgraph backend["Backend"]');
   expect(copied).toContain('user -->|"HTTPS"| api');
 });
+
+test('holding Space and dragging pans the view without moving anything', async ({ page }) => {
+  await page.goto('index.html');
+  const before = await preview(page).textContent();
+  const box = await page.locator('#editorCanvas').boundingBox();
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const colAt = async () => {
+    await page.mouse.move(point.x, point.y);
+    return Number((await page.locator('#cursorCoord').textContent()).match(/Col: (-?\d+)/)[1]);
+  };
+  const colBefore = await colAt();
+  await page.locator('#editorCanvas').focus();
+  await page.keyboard.down(' ');
+  await page.mouse.down();
+  await page.mouse.move(point.x + 200, point.y, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up(' ');
+  expect(await colAt()).toBeLessThan(colBefore - 5); // the view moved right
+  expect(await preview(page).textContent()).toBe(before);
+});
