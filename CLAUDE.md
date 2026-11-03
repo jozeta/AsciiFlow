@@ -95,7 +95,12 @@ changes in the browser (draw, connect, export, re-import).
   canvas hit-testing gets the drawn routes for free; pass it through new call sites), the search
   runs in a window around the two shapes before widening, and each detour is kept between passes
   until its own inputs change (`_detourMemo`, keyed by `obstacleKey()` of the searched area). A
-  test compares reused routes with routing from scratch over a simulated drag. The canvas passes the diagram's
+  test compares reused routes with routing from scratch over a simulated drag.
+- **Second routing step** (`separateOverlappingDetours`, run inside `createRouteContext`): a
+  searched detour that runs along another connector's line is searched again, paying per cell
+  on other connectors' lines (along costs more than crossing). Re-routes run in an order fixed
+  by shape positions, never connector ids or list order, so re-imported diagrams (new ids, new
+  order) route the same; a test checks that. The canvas passes the diagram's
   connectors and a shape map that includes notes (`AsciiCanvas.shapeMap()`), so hit-testing
   follows the drawn routes.
 - **Labels are placed after all connectors are drawn** (`renderConnectorLabel`): on the line

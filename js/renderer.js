@@ -1383,7 +1383,7 @@
         if (kept && kept.base === base && kept.area === this.obstacleKey(obstacles, kept.window)) return kept.info;
 
         const detour = this.routeAroundShapes(shapeFrom, shapeTo, fromAnchor, toAnchor, hasArrow, obstacles, sideUsed);
-        const result = detour ? { points: detour.points, sourceJunction: detour.sourceJunction } : info;
+        const result = detour ? { points: detour.points, sourceJunction: detour.sourceJunction, searched: detour.searched } : info;
         const window = detour ? detour.window : null;
         memo.set(conn.id, { base, window, area: this.obstacleKey(obstacles, window), info: result });
         if (memo.size > 5000) memo.clear();
@@ -1772,8 +1772,76 @@
         use(other, `${f.id}:${fa}`);
         use(other, `${t.id}:${ta}`);
       }
-      this._routeContext = { sig, connectors, obstacles, sideCounts, sidesOf, routes: new Map() };
-      return this._routeContext;
+      const ctx = { sig, connectors, obstacles, sideCounts, sidesOf, routes: new Map() };
+      this._routeContext = ctx;
+      if (connectors && connectors.length) this.separateOverlappingDetours(ctx, shapeMap, connectors);
+      return ctx;
+    }
+
+    /**
+     * Second step of routing a whole diagram: a searched detour that runs
+     * along another connector's line is searched again, this time paying
+     * for each cell on other connectors' lines. Re-routes go in an order
+     * fixed by shape positions, so the result does not depend on the order
+     * or ids of the connectors (which change when a diagram is re-imported).
+     */
+    separateOverlappingDetours(ctx, shapeMap, connectors) {
+      const first = new Map();
+      for (const conn of connectors) {
+        const info = this.resolveConnectorRouteInfo(conn, shapeMap, null, ctx);
+        if (info && info.points) first.set(conn, info);
+      }
+      const segmentsOf = (pts) => {
+        const out = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          if (a.x === b.x || a.y === b.y) out.push({ x0: a.x, y0: a.y, x1: b.x, y1: b.y });
+        }
+        return out;
+      };
+      // Cells (inner cells of each segment) used along an axis, per connector
+      const runs = new Map();
+      for (const [conn, info] of first) {
+        for (const sg of segmentsOf(info.points)) {
+          const len = Math.max(Math.abs(sg.x1 - sg.x0), Math.abs(sg.y1 - sg.y0));
+          const axis = sg.y0 === sg.y1 ? 'h' : 'v';
+          for (let t = 1; t < len; t++) {
+            const key = `${sg.x0 + Math.sign(sg.x1 - sg.x0) * t},${sg.y0 + Math.sign(sg.y1 - sg.y0) * t},${axis}`;
+            if (!runs.has(key)) runs.set(key, new Set());
+            runs.get(key).add(conn);
+          }
+        }
+      }
+      const overlapping = new Set();
+      for (const set of runs.values()) if (set.size > 1) set.forEach(c => overlapping.add(c));
+
+      // Re-route in an order fixed by the shapes' positions (not ids or list
+      // order), each avoiding the lines already settled, including earlier
+      // re-routes
+      const geometryKey = (conn) => {
+        const f = shapeMap.get(conn.fromShapeId), t = shapeMap.get(conn.toShapeId);
+        return [f.x, f.y, f.w, f.h, t.x, t.y, t.w, t.h];
+      };
+      const order = [...overlapping].filter(c => first.get(c).searched).sort((a, b) => {
+        const ka = geometryKey(a), kb = geometryKey(b);
+        for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+        return 0;
+      });
+      const settled = new Map(first);
+      for (const conn of order) {
+        const lines = [];
+        for (const [other, oi] of settled) if (other !== conn) lines.push(...segmentsOf(oi.points));
+        const shapeFrom = shapeMap.get(conn.fromShapeId);
+        const shapeTo = shapeMap.get(conn.toShapeId);
+        const sideUsed = (key) => (ctx.sideCounts.get(key) || 0) - ((ctx.sidesOf.get(conn) || []).includes(key) ? 1 : 0) > 0;
+        const again = this.routeAroundShapes(shapeFrom, shapeTo, conn.fromAnchor || 'auto', conn.toAnchor || 'auto',
+          conn.arrowEnd !== 'none', ctx.obstacles, sideUsed, lines);
+        if (again) {
+          const info = { points: again.points, sourceJunction: again.sourceJunction, searched: true };
+          ctx.routes.set(conn, info);
+          settled.set(conn, info);
+        }
+      }
     }
 
     /**
@@ -1821,10 +1889,12 @@
      * The search first looks in a window around the two shapes and only
      * widens to the whole diagram when nothing fits there.
      */
-    routeAroundShapes(fromShape, toShape, fromAnchor, toAnchor, hasArrow, obstacles, sideUsed = () => false) {
+    routeAroundShapes(fromShape, toShape, fromAnchor, toAnchor, hasArrow, obstacles, sideUsed = () => false, lines = null) {
       const SIDES = ['right', 'bottom', 'left', 'top'];
       const TURN = 4;
       const SHARED_SIDE = 40; // sharing a side with another connector overlaps lines
+      const ALONG_LINE = 6;   // per cell running along another connector's line
+      const CROSS_LINE = 1;   // per cell crossing one
       const fromSides = fromAnchor === 'auto' ? SIDES : [fromAnchor];
       const toSides = toAnchor === 'auto' ? SIDES : [toAnchor];
       const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
@@ -1878,7 +1948,7 @@
       let decidedIn = null;
       // Nothing to search when a standard route already beats every bound
       if (best && searchPairs.every(pair => pair.lower >= best.cost)) {
-        return { points: best.points, sourceJunction: best.sourceJunction, window: windows[1] };
+        return { points: best.points, sourceJunction: best.sourceJunction, window: windows[1], searched: false };
       }
       for (let wi = 0; wi < windows.length; wi++) {
         const win = windows[wi];
@@ -1891,6 +1961,19 @@
           const x0 = Math.max(o.x0, minX), x1 = Math.min(o.x1, maxX);
           const y0 = Math.max(o.y0, minY), y1 = Math.min(o.y1, maxY);
           for (let y = y0; y <= y1; y++) blocked.fill(1, (y - minY) * gw + (x0 - minX), (y - minY) * gw + (x1 - minX) + 1);
+        }
+        // Other connectors' lines: bit 1 = horizontal run, bit 2 = vertical
+        const occupied = lines && lines.length ? new Uint8Array(gw * gh) : null;
+        if (occupied) {
+          for (const ln of lines) {
+            const len = Math.max(Math.abs(ln.x1 - ln.x0), Math.abs(ln.y1 - ln.y0));
+            const sx = Math.sign(ln.x1 - ln.x0), sy = Math.sign(ln.y1 - ln.y0);
+            const bit = sy === 0 ? 1 : 2;
+            for (let t = 0; t <= len; t++) {
+              const x = ln.x0 + sx * t, y = ln.y0 + sy * t;
+              if (x >= minX && x <= maxX && y >= minY && y <= maxY) occupied[(y - minY) * gw + (x - minX)] |= bit;
+            }
+          }
         }
 
         // Search buffers, kept between calls; a stamp marks entries of this search
@@ -1942,7 +2025,12 @@
                 if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
                 const ncell = ny * gw + nx;
                 if (blocked[ncell] && ncell !== endKey) continue;
-                push(ncell * 4 + nd, cost + 1 + (nd === dir ? 0 : TURN), state);
+                let extra = 0;
+                if (occupied && occupied[ncell] && ncell !== endKey) {
+                  const along = (nd & 1) ? 2 : 1; // dirs 0,2 horizontal; 1,3 vertical
+                  extra = (occupied[ncell] & along) ? ALONG_LINE : CROSS_LINE;
+                }
+                push(ncell * 4 + nd, cost + 1 + (nd === dir ? 0 : TURN) + extra, state);
               }
             }
           }
@@ -1958,7 +2046,7 @@
             cells.push({ x: (cell % gw) + minX, y: Math.floor(cell / gw) + minY });
           }
           cells.reverse();
-          best = { cost, points: this.simplifyWaypoints(cells), sourceJunction: ep.sourceJunction };
+          best = { cost, points: this.simplifyWaypoints(cells), sourceJunction: ep.sourceJunction, searched: true };
         }
         // A route found in this window: wider windows can only add longer ones
         if (foundAny || (best && !searchPairs.length)) {
@@ -1966,7 +2054,7 @@
           break;
         }
       }
-      return best ? { points: best.points, sourceJunction: best.sourceJunction, window: decidedIn } : null;
+      return best ? { points: best.points, sourceJunction: best.sourceJunction, window: decidedIn, searched: !!best.searched } : null;
     }
 
     /**

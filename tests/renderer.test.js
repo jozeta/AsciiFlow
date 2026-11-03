@@ -224,3 +224,52 @@ test('routes reused between drag frames match routing from scratch', () => {
     }
   }
 });
+
+// Four connectors around a diamond; two must detour on the same side
+function crowded() {
+  return {
+    shapes: [
+      { id: 's0', type: 'rectangle', x: 12, y: 28, w: 10, h: 5, text: 'N0' },
+      { id: 's1', type: 'rectangle', x: 24, y: 20, w: 10, h: 5, text: 'N1' },
+      { id: 's2', type: 'database', x: 0, y: 22, w: 10, h: 7, text: 'N2' },
+      { id: 's3', type: 'database', x: 12, y: 16, w: 10, h: 5, text: 'N3' },
+      { id: 's4', type: 'diamond', x: 32, y: 6, w: 10, h: 7, text: 'N4' }
+    ],
+    connectors: [
+      { id: 'c0', fromShapeId: 's4', toShapeId: 's0', fromAnchor: 'left', toAnchor: 'left', arrowEnd: 'none' },
+      { id: 'c1', fromShapeId: 's4', toShapeId: 's2', fromAnchor: 'auto', toAnchor: 'right', arrowEnd: 'none', style: 'dashed', label: 'L1' },
+      { id: 'c3', fromShapeId: 's3', toShapeId: 's4', fromAnchor: 'left', toAnchor: 'left', arrowEnd: 'none' },
+      { id: 'c4', fromShapeId: 's1', toShapeId: 's4', fromAnchor: 'auto', toAnchor: 'auto', arrowEnd: 'none' }
+    ],
+    texts: [],
+    notes: []
+  };
+}
+
+test('detours do not run along other connectors', () => {
+  const d = crowded();
+  const r = new AsciiRenderer();
+  const map = new Map(d.shapes.map(s => [s.id, s]));
+  const ctx = r.createRouteContext(map, d.connectors);
+  const used = new Map();
+  for (const c of d.connectors) {
+    const pts = r.resolveConnectorPoints(c, map, d.connectors, ctx);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const len = Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      for (let t = 1; t < len; t++) {
+        const key = `${a.x + Math.sign(b.x - a.x) * t},${a.y + Math.sign(b.y - a.y) * t},${a.y === b.y ? 'h' : 'v'}`;
+        assert.ok(!used.has(key) || used.get(key) === c.id, `${c.id} runs along ${used.get(key)} at ${key}`);
+        used.set(key, c.id);
+      }
+    }
+  }
+});
+
+test('routes do not depend on the order or ids of connectors', () => {
+  const d = crowded();
+  const expected = new AsciiRenderer().render(d);
+  const shuffled = crowded();
+  shuffled.connectors.reverse().forEach((c, i) => { c.id = `x${i}`; });
+  assert.equal(new AsciiRenderer().render(shuffled), expected);
+});

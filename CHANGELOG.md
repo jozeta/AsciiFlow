@@ -6,6 +6,9 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
+- Detours no longer run along other connectors' lines: a detour that overlaps another connector
+  is routed again around the existing lines (overlapping cells in the sample layouts: 113 -> 8);
+  routes stay independent of connector order and ids
 - Dependabot: monthly update PRs for the GitHub Actions and the npm test tooling, only for
   versions at least 14 days old
 - Much faster routing on big diagrams: dragging a shape in a diagram with 100 shapes now keeps up
