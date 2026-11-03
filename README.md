@@ -32,6 +32,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
   - Arrowhead shapes: Solid Triangle (`►`), Open Chevron (`▷`), Dot (`●`), Diamond (`◆`), and Bar/Tee (`│`).
   - Line Styles: Solid (`─`), Dashed (`╌`), Dotted (`┈`), and Double Border (`═`).
   - Routing Modes: Smart Manhattan **Orthogonal** routing or Direct **Straight** line routing.
+  - Smart routing: connectors go around other shapes instead of through them, detours avoid running along other connectors, meeting and crossing lines get proper junctions (`├ ┤ ┬ ┴ ┼`), and labels are placed where they never hide an arrowhead or junction. Big diagrams stay smooth while dragging.
 - **Multi-Format Export Options**:
   - **Export as SVG**: Vector graphics with monospace font stacks and clean background containers.
   - **Export as PNG**: High-DPI rasterized PNG image download.
@@ -62,9 +63,10 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 │   └── app.js          # Main application orchestrator and event wiring
 ├── vendor/             # Self-hosted Bootstrap 5.3.3 and Bootstrap Icons 1.11.3 (MIT)
 ├── favicon.svg
-├── .github/workflows/  # CI: syntax check and tests on every push and pull request
+├── .github/            # CI workflow (unit + browser tests) and Dependabot config
 ├── tests/              # Unit tests (node --test) and browser tests (tests/e2e, Playwright)
-├── package.json        # Test tooling only; the app has no dependencies
+├── package.json        # Test tooling only (Playwright, axe-core); the app has no dependencies
+├── playwright.config.js
 └── docs/screenshots/   # README images
 ```
 
@@ -88,7 +90,8 @@ node --test tests/*.test.js
 ```
 
 The browser tests drive the real app in Chromium with Playwright: loading without third-party
-requests, undo/redo, imports, error toasts, hostile share links, selecting connectors, and a
+requests, undo/redo, imports and exports, error toasts, hostile share links, selecting connectors,
+drawing a flowchart with the keyboard alone, touch drag, double-tap and pinch at phone size, and a
 WCAG 2.1 A/AA check with axe-core in both themes and every dialog. They need the dev tooling:
 
 ```sh
@@ -125,6 +128,8 @@ editor: unknown modes fall back to `unicode`, coordinates are clamped to ±1000 
 sizes to 500, list lengths, waypoints and strings are capped, and values of unexpected types are
 dropped. Valid diagrams pass through unchanged, so existing share links keep working. See
 [SECURITY.md](SECURITY.md) to report a vulnerability.
+
+## How it works
 
 ### 1. Internal Diagram Representation
 
@@ -177,12 +182,11 @@ The rendering engine operates on a 2D discrete character grid:
    - Borders are rasterized using coordinate math for rectangles, single-step diagonal calculations for diamonds and hexagons, and rounded corners for circles and rounded boxes.
 4. **Pass 2 — Orthogonal Connector Routing**:
    - Computes Manhattan waypoints `[p0, p1, ..., pn]` between source and target anchors.
-   - Draws horizontal segments (`─` or `-`) and vertical segments (`│` or `|`).
-   - Places corner turns (`┌`, `┐`, `└`, `┘` or `+`).
-   - Resolves intersections: when a horizontal connector crosses a vertical connector, it creates a junction (`┼` or `+`).
-   - Resolves border junctions: when a connector leaves a rectangle border, it renders appropriate T-junctions (`├`, `┴`, `┤`, `┬`).
-   - Places directional arrowheads (`►`, `◄`, `▼`, `▲` or `>`, `<`, `v`, `^`) pointing cleanly at the target border.
-5. **Pass 3 — Text Placement**:
+   - If that route would run through another shape, searches the grid for the cheapest route around it (length, turns, and sides other connectors already use); a detour that would run along another connector's line is routed again around it. Routes are shared with hit-testing and kept between frames, so dragging stays smooth.
+   - Each connector records which directions it occupies in every cell; overlapping cells are merged, so corners, T-junctions and crossings come out right (`┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼`, or `+` in ASCII mode), including where a connector meets a shape border.
+   - Places directional arrowheads (`►`, `◄`, `▼`, `▲` or `>`, `<`, `v`, `^`) pointing cleanly at the target border; other lines never erase an arrowhead.
+5. **Pass 3 — Labels and Text**:
+   - Connector labels are placed after every line is drawn: on the line where they hide nothing, otherwise along or beside it.
    - Centers or aligns multiline text strings within shapes.
    - Text cells have priority: connectors and lines will never overwrite text characters.
 6. **String Export & Trimming**:
@@ -192,7 +196,7 @@ The rendering engine operates on a 2D discrete character grid:
 ### 3. Visual Canvas & Monospace Geometry (`canvas.js`)
 
 - Operates on a monospace character cell coordinate system (`cellWidth: 10px`, `cellHeight: 18px`).
-- Mouse screen coordinates are mapped to grid cells via:
+- Pointer (mouse, pen or touch) screen coordinates are mapped to grid cells via:
   ```javascript
   col = Math.floor((screenX - panX) / (cellWidth * zoom));
   row = Math.floor((screenY - panY) / (cellHeight * zoom));
@@ -200,11 +204,14 @@ The rendering engine operates on a 2D discrete character grid:
 - HiDPI (Retina) canvas scaling with smooth hardware-accelerated drawing.
 - 8-point interactive resize handles (NW, N, NE, E, SE, S, SW, W).
 - Glowing anchor points on shape borders for visual connector creation.
-- Floating in-place `<textarea>` overlay on double-click with identical monospace font and line-height.
+- Floating in-place `<textarea>` overlay on double-click (or double-tap, Enter, F2) with identical monospace font and line-height.
+- Two-finger pinch zooms around the fingers and two-finger drag pans; the canvas is keyboard-focusable and announces keyboard actions to screen readers.
 
 ---
 
 ## Keyboard Shortcuts
+
+On macOS, use `Cmd` where the table says `Ctrl`.
 
 | Shortcut | Action |
 | :--- | :--- |
@@ -233,6 +240,7 @@ The rendering engine operates on a 2D discrete character grid:
 | `P` | Parallelogram (I/O) tool |
 | `X` | Hexagon (Preparation) tool |
 | `C` | Circle / Ellipse tool |
+| `B` | Database tool |
 | `K` / `W` | Connector tool |
 | `L` | Line tool |
 | `A` | Arrow tool |

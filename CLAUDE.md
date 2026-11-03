@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AsciiFlow is a browser-based ASCII/Unicode diagram and flowchart editor: draw shapes and
 orthogonal connectors visually, then copy the result as text (or export SVG/PNG/Markdown/JSON).
-It can also import raw ASCII diagrams and Mermaid `graph TD/LR`. Plain HTML/CSS/vanilla JS, no
-build step, no runtime dependencies. Live at https://jozeta.github.io/AsciiFlow/ (GitHub Pages).
+It imports raw ASCII diagrams and Mermaid flowcharts and exports Mermaid, and works with mouse,
+touch, pen and keyboard. Plain HTML/CSS/vanilla JS, no build step, no runtime dependencies. Live at https://jozeta.github.io/AsciiFlow/ (GitHub Pages).
 
 ## Commands
 
