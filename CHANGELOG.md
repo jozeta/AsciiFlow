@@ -6,6 +6,10 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
+Nothing yet.
+
+## 1.1.0 - 2026-11-03
+
 - Touch and pen support: the canvas uses pointer events, so shapes can be dragged with a finger,
   double-tapped to edit, and the view pinched to zoom and panned with two fingers
 - Phones and tablets: the header wraps and turns icon-only instead of pushing buttons off
