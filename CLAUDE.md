@@ -25,11 +25,17 @@ The tests load the browser scripts into a `vm` context (`tests/helpers.js`) and 
 renderer (both modes), ASCII/Mermaid import and `normalizeDiagram()` validation. Wrap vm results
 in `plain()` before `deepEqual` (cross-realm prototypes). There is no linter; also verify UI
 changes in the browser (draw, connect, export, re-import).
-- ASCII import must recognise everything the renderer emits on a box border, in every mode: if
-  the renderer gains a new border or junction character, add it to `isHBorder`/`isVBorder`/
-  `BORDER_JUNCTIONS` in `js/parser.js`. Known import gaps (both modes): diamonds,
-  parallelograms and titled containers are not recognised, and bent connectors come back as
-  several segments.
+- CI (`.github/workflows/ci.yml`) runs `node --check` on `js/` and `tests/` plus the test suite.
+- **ASCII import (`parseAsciiToDiagram`) mirrors the renderer's geometry.** It detects shapes in
+  order (boxes/containers/notes → circles → diamonds → parallelograms), then traces connectors
+  as paths through `LINE_GLYPHS` (straight through crossings, turning at corners, stepping over
+  labels drawn on the line), attaches open ends to the shape whose outline (`owner`) they touch,
+  and keeps leftover words as `texts`. If you change how the renderer draws a shape, border,
+  junction or label, update the matching detector and run the template round-trip tests. Not
+  recognised yet: hexagon, triangle, database, cloud, queue (their text becomes free text).
+- Two things in the renderer's own output lose information, so round trips are not exact:
+  connector labels are drawn over the line and can hide an arrowhead or a junction, and
+  connectors sharing a segment put their labels on the same spot.
 
 ## Architecture
 
@@ -53,7 +59,13 @@ changes in the browser (draw, connect, export, re-import).
   `notes`, `mode: "unicode"|"ascii"|"unicode-curved"`); text output is always re-rendered from it, never edited.
 - **Renderer passes, in order:** shape interiors and borders → connector routing (corners,
   crossings become junctions, border T-junctions, arrowheads) → text placement. Text cells have
-  priority: lines never overwrite text. Trailing whitespace is trimmed per row.
+  priority: lines never overwrite text, and arrowheads have priority over other connectors'
+  lines. Trailing whitespace is trimmed per row.
+- **Connector cells are drawn from direction masks** (`DIR_*`, `AsciiGrid.lineDirs`): each
+  orthogonal connector records which directions it occupies per cell and `mergeLine()` ORs them
+  with what is already there, so corners, T-junctions and crossings (including where a connector
+  meets a straight shape border) come from `getLineGlyph()`. Junction names describe the stem:
+  `t_down` is `┬`, `t_up` is `┴`.
 - **Grid geometry:** canvas cell is 10×18 px; screen → cell via
   `col = floor((x - panX) / (cellWidth * zoom))`. Keep renderer and canvas in agreement.
 - Every renderer change must work in both `unicode` and `ascii` modes.

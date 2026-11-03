@@ -6,6 +6,18 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- ASCII import now recognises diamonds, parallelograms, circles, notes and titled or dashed
+  containers (keeping nested shapes), traces bent connectors as one connector through corners
+  and crossings, keeps connector labels and arrowheads, and keeps other text as text items; all
+  three templates now re-import with every shape, note and connector
+- Fix the Import ASCII dialog shifting the first line when it started with spaces
+- Connectors that meet, cross or end on each other or on a shape border now get the right
+  junction (`├ ┤ ┬ ┴ ┼`) instead of overwriting one another, and a connector no longer erases
+  another connector's arrowhead
+- Show import and clipboard errors as a toast instead of a blocking `alert()`
+- Add a favicon, and Bootstrap's source maps so the browser's developer tools stop reporting 404s
+- Run the syntax check and test suite on GitHub Actions for every push and pull request
+- Refresh the README screenshot
 - Fix the Unicode junction where a connector leaves the top or bottom of a box: it was drawn
   upside down (`┴` on a bottom border, `┬` on a top border)
 - Fix ASCII import of Unicode diagrams: boxes with a connector attached (a `├ ┤ ┬ ┴` junction

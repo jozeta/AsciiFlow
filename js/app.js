@@ -239,7 +239,7 @@
       btnCopyMarkdown.addEventListener('click', async () => {
         const ok = await window.AsciiStorage.copyMarkdownCodeBlock(canvas.diagram, canvas.renderer);
         if (ok) showToast('Markdown code block copied to clipboard');
-        else showToast('Failed to copy to clipboard');
+        else showToast('Failed to copy to clipboard', 'error');
       });
     }
 
@@ -250,7 +250,7 @@
         const url = window.AsciiStorage.generateShareableURL(canvas.diagram);
         const ok = await window.AsciiStorage.copyToClipboard(url);
         if (ok) showToast('Shareable diagram link copied to clipboard');
-        else showToast('Failed to copy link');
+        else showToast('Failed to copy link', 'error');
       });
     }
 
@@ -274,7 +274,7 @@
               updateAsciiPreview();
               showToast('Diagram imported successfully');
             } catch (err) {
-              alert('Error parsing JSON diagram file: ' + err.message);
+              showToast('Could not import JSON file: ' + err.message, 'error');
             }
           };
           reader.readAsText(file);
@@ -289,7 +289,9 @@
       btnSubmitImportAscii.addEventListener('click', () => {
         const asciiArea = document.getElementById('importAsciiText');
         const feedback = document.getElementById('importAsciiFeedback');
-        const text = asciiArea ? asciiArea.value.trim() : '';
+        // Drop blank lines at the start and trailing whitespace only: trimming
+        // the first line's indentation would shift it against the other rows
+        const text = asciiArea ? asciiArea.value.replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd() : '';
 
         if (!text) {
           if (feedback) feedback.textContent = 'Please enter or paste an ASCII diagram first.';
@@ -298,7 +300,8 @@
 
         try {
           const parsed = window.AsciiParser.parseAsciiToDiagram(text);
-          if (parsed.shapes.length === 0 && parsed.connectors.length === 0) {
+          const shapeCount = parsed.shapes.length + parsed.notes.length;
+          if (shapeCount === 0 && parsed.connectors.length === 0) {
             if (feedback) feedback.textContent = 'No boxes or shapes detected in the input text.';
             return;
           }
@@ -311,7 +314,7 @@
             modal.hide();
           }
           if (feedback) feedback.textContent = '';
-          showToast(`Imported ${parsed.shapes.length} shapes from ASCII`);
+          showToast(`Imported ${shapeCount} shapes and ${parsed.connectors.length} connectors from ASCII`);
         } catch (err) {
           if (feedback) feedback.textContent = 'Parse error: ' + err.message;
         }
@@ -793,19 +796,32 @@
     if (success) {
       showToast('ASCII diagram copied to clipboard');
     } else {
-      showToast('Failed to copy to clipboard');
+      showToast('Failed to copy to clipboard', 'error');
     }
   }
 
-  function showToast(message) {
+  /**
+   * Show a short status message in the toast.
+   * type: 'success' (default) or 'error'. Built with DOM nodes, never innerHTML,
+   * because messages can include text from imported files.
+   */
+  function showToast(message, type = 'success') {
     const toastBody = document.getElementById('toastBody');
-    if (toastBody) toastBody.textContent = message;
+    if (toastBody) {
+      const icon = document.createElement('i');
+      icon.className = type === 'error'
+        ? 'bi bi-exclamation-triangle-fill text-danger'
+        : 'bi bi-check-circle-fill text-success';
+      icon.setAttribute('aria-hidden', 'true');
+      const text = document.createElement('span');
+      text.textContent = message;
+      toastBody.replaceChildren(icon, text);
+    }
 
     if (toastInstance) {
       toastInstance.show();
     } else {
-      // Fallback
-      alert(message);
+      console.warn('AsciiFlow:', message);
     }
   }
 
@@ -877,7 +893,7 @@
               updateAsciiPreview();
               showToast(`Imported ${file.name}`);
             } catch (err) {
-              alert('Error reading dropped JSON diagram: ' + err.message);
+              showToast(`Could not import ${file.name}: ` + err.message, 'error');
             }
           };
           reader.readAsText(file);

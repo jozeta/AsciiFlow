@@ -53,6 +53,43 @@ test('connector junctions point the way the connector leaves', () => {
   assert.match(render(down, 'ascii'), /\+----\+-----\+/);
 });
 
+// Free-floating connectors: a horizontal line, a vertical line crossing it,
+// and a second vertical line that starts on it.
+function meetingLines() {
+  const line = (id, from, to) => ({ id, fromPoint: from, toPoint: to, arrowEnd: 'none' });
+  return {
+    shapes: [],
+    connectors: [
+      line('h', { x: 0, y: 3 }, { x: 10, y: 3 }),
+      line('v', { x: 5, y: 0 }, { x: 5, y: 6 }),
+      line('t', { x: 8, y: 3 }, { x: 8, y: 6 })
+    ]
+  };
+}
+
+test('connectors that cross or meet get junctions instead of overwriting each other', () => {
+  const unicode = render(meetingLines(), 'unicode').split('\n');
+  const row = unicode.find(l => l.includes('┼'));
+  assert.ok(row, 'crossing becomes ┼');
+  assert.match(row, /─┼──┬─/, 'line starting on another becomes ┬');
+
+  const ascii = render(meetingLines(), 'ascii').split('\n');
+  assert.ok(ascii.some(l => /-\+--\+-/.test(l)), 'ascii uses + for both');
+});
+
+test("a connector starting on another's arrowhead does not erase it", () => {
+  const box = (id, y) => ({ id, type: 'rectangle', x: 2, y, w: 12, h: 5, text: id });
+  const d = {
+    shapes: [box('A', 2), box('B', 12)],
+    connectors: [
+      { id: 'in', fromShapeId: 'A', fromAnchor: 'bottom', toShapeId: 'B', toAnchor: 'top' },
+      { id: 'out', fromShapeId: 'B', fromAnchor: 'top', toPoint: { x: 30, y: 9 } }
+    ]
+  };
+  assert.match(render(d, 'unicode'), /▼─+┘/);
+  assert.match(render(d, 'ascii'), /v-+\+/);
+});
+
 for (const key of Object.keys(SAMPLE_TEMPLATES)) {
   test(`template "${key}" renders in both modes`, () => {
     const d = AsciiStorage.getSample(key);

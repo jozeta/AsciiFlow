@@ -133,6 +133,18 @@
   /**
    * 2D Character Matrix representing the rendered canvas
    */
+  // Directions a line leaves a cell in; combined into a bitmask per cell.
+  const DIR_LEFT = 1;
+  const DIR_RIGHT = 2;
+  const DIR_UP = 4;
+  const DIR_DOWN = 8;
+
+  // Shape border characters a connector can join with a junction
+  const STRAIGHT_BORDER_DIRS = {
+    '─': DIR_LEFT | DIR_RIGHT, '-': DIR_LEFT | DIR_RIGHT,
+    '│': DIR_UP | DIR_DOWN, '|': DIR_UP | DIR_DOWN
+  };
+
   class AsciiGrid {
     constructor(minCol = 0, minRow = 0, maxCol = 80, maxRow = 40) {
       this.minCol = minCol;
@@ -155,6 +167,13 @@
       // Track shape ownership
       this.cellOwners = Array.from({ length: this.height }, () =>
         Array(this.width).fill(null)
+      );
+
+      // Directions (DIR_* bitmask) that orthogonal connectors occupy in each
+      // cell, so lines that meet, cross or end on each other get the right
+      // junction glyph instead of overwriting one another.
+      this.lineDirs = Array.from({ length: this.height }, () =>
+        Array(this.width).fill(0)
       );
     }
 
@@ -202,6 +221,12 @@
         return;
       }
 
+      // Arrowheads mark where a connector ends; another connector's line
+      // passing through or starting on that cell must not erase it
+      if (currentType === 'arrow' && (type === 'line' || type === 'junction')) {
+        return;
+      }
+
       // Handle intersection between horizontal and vertical lines
       if ((currentType === 'line' || currentType === 'border') && type === 'line') {
         const isCurrentH = currentChar === '─' || currentChar === '-';
@@ -217,6 +242,45 @@
 
       this.cells[r][c] = char;
       this.cellTypes[r][c] = type;
+      this.lineDirs[r][c] = 0;
+      if (ownerId) this.cellOwners[r][c] = ownerId;
+    }
+
+    /**
+     * Add an orthogonal connector's directions to a cell and redraw it.
+     * glyphFor(mask) returns the character for a combined direction mask.
+     * Only merges with other connector cells; borders, arrows and empty
+     * cells keep the normal set() rules, and text is never overwritten.
+     */
+    mergeLine(col, row, mask, ownerId, glyphFor) {
+      if (!this.isInBounds(col, row)) return;
+      const r = row - this.minRow;
+      const c = col - this.minCol;
+      const currentType = this.cellTypes[r][c];
+      const currentDirs = this.lineDirs[r][c];
+
+      // A connector ending on (or crossing) a straight shape border joins it
+      // with a T-junction (or a cross) instead of cutting through it
+      const borderDirs = currentType === 'border' ? STRAIGHT_BORDER_DIRS[this.cells[r][c]] : 0;
+      if (borderDirs && !(borderDirs & mask)) {
+        this.cells[r][c] = glyphFor(borderDirs | mask);
+        this.cellTypes[r][c] = 'junction';
+        this.lineDirs[r][c] = borderDirs | mask;
+        if (ownerId) this.cellOwners[r][c] = ownerId;
+        return;
+      }
+
+      if ((currentType !== 'line' && currentType !== 'junction') || !currentDirs) {
+        this.set(col, row, glyphFor(mask), 'line', ownerId);
+        if (this.cellTypes[r][c] === 'line') this.lineDirs[r][c] = mask;
+        return;
+      }
+
+      const merged = currentDirs | mask;
+      const straight = !(merged & (DIR_UP | DIR_DOWN)) || !(merged & (DIR_LEFT | DIR_RIGHT));
+      this.cells[r][c] = glyphFor(merged);
+      this.cellTypes[r][c] = straight ? 'line' : 'junction';
+      this.lineDirs[r][c] = merged;
       if (ownerId) this.cellOwners[r][c] = ownerId;
     }
 
@@ -1087,37 +1151,39 @@
           this.drawBresenhamLine(grid, p1.x, p1.y, p2.x, p2.y, { ...chars, h: hChar, v: vChar }, id, false);
         }
       } else {
+        // Collect the directions this connector occupies in each cell, then
+        // draw each cell once. Corners fall out of the union of the two
+        // segments meeting there; meeting other connectors merges into a
+        // T-junction or cross in grid.mergeLine().
+        const cellDirs = new Map();
+        const addDirs = (x, y, mask) => {
+          const key = `${x},${y}`;
+          const prev = cellDirs.get(key);
+          cellDirs.set(key, { x, y, mask: (prev ? prev.mask : 0) | mask });
+        };
+
         for (let i = 0; i < points.length - 1; i++) {
           const p1 = points[i];
           const p2 = points[i + 1];
 
-          if (p1.y === p2.y) {
-            // Horizontal line
+          if (p1.y === p2.y && p1.x !== p2.x) {
             const startX = Math.min(p1.x, p2.x);
             const endX = Math.max(p1.x, p2.x);
             for (let col = startX; col <= endX; col++) {
-              grid.set(col, p1.y, hChar, 'line', id);
+              addDirs(col, p1.y, (col > startX ? DIR_LEFT : 0) | (col < endX ? DIR_RIGHT : 0));
             }
-          } else if (p1.x === p2.x) {
-            // Vertical line
+          } else if (p1.x === p2.x && p1.y !== p2.y) {
             const startY = Math.min(p1.y, p2.y);
             const endY = Math.max(p1.y, p2.y);
             for (let row = startY; row <= endY; row++) {
-              grid.set(p1.x, row, vChar, 'line', id);
+              addDirs(p1.x, row, (row > startY ? DIR_UP : 0) | (row < endY ? DIR_DOWN : 0));
             }
           }
         }
 
-        // 3. Draw corner turns
-        for (let i = 1; i < points.length - 1; i++) {
-          const prev = points[i - 1];
-          const curr = points[i];
-          const next = points[i + 1];
-
-          const cornerChar = this.getCornerChar(prev, curr, next, chars);
-          if (cornerChar) {
-            grid.set(curr.x, curr.y, cornerChar, 'junction', id);
-          }
+        const glyphFor = (mask) => this.getLineGlyph(mask, chars, hChar, vChar);
+        for (const { x, y, mask } of cellDirs.values()) {
+          grid.mergeLine(x, y, mask, id, glyphFor);
         }
       }
 
@@ -1143,40 +1209,28 @@
     }
 
     /**
-     * Determine corner character when changing direction
+     * Character for a cell whose connector directions are `mask` (DIR_*).
+     * Straight runs (and line ends) use the connector's style characters;
+     * corners, T-junctions and crossings use the mode's junction set.
      */
-    getCornerChar(pPrev, pCurr, pNext, chars) {
-      const dInX = pCurr.x - pPrev.x;
-      const dInY = pCurr.y - pPrev.y;
-      const dOutX = pNext.x - pCurr.x;
-      const dOutY = pNext.y - pCurr.y;
+    getLineGlyph(mask, chars, hChar, vChar) {
+      const vertical = mask & (DIR_UP | DIR_DOWN);
+      const horizontal = mask & (DIR_LEFT | DIR_RIGHT);
+      if (!vertical) return hChar;
+      if (!horizontal) return vChar;
+      if (this.mode === 'ascii') return chars.cross;
 
-      const goingRight = dInX > 0;
-      const goingLeft = dInX < 0;
-      const goingDown = dInY > 0;
-      const goingUp = dInY < 0;
-
-      const turningDown = dOutY > 0;
-      const turningUp = dOutY < 0;
-      const turningRight = dOutX > 0;
-      const turningLeft = dOutX < 0;
-
-      if (this.mode === 'ascii') {
-        return chars.cross; // '+'
+      switch (mask) {
+        case DIR_RIGHT | DIR_DOWN: return chars.tl;
+        case DIR_LEFT | DIR_DOWN: return chars.tr;
+        case DIR_RIGHT | DIR_UP: return chars.bl;
+        case DIR_LEFT | DIR_UP: return chars.br;
+        case DIR_UP | DIR_DOWN | DIR_RIGHT: return chars.t_right;
+        case DIR_UP | DIR_DOWN | DIR_LEFT: return chars.t_left;
+        case DIR_LEFT | DIR_RIGHT | DIR_DOWN: return chars.t_down;
+        case DIR_LEFT | DIR_RIGHT | DIR_UP: return chars.t_up;
+        default: return chars.cross;
       }
-
-      // Unicode corner selection
-      if (goingRight && turningDown) return chars.tr; // ┐
-      if (goingRight && turningUp) return chars.br;   // ┘
-      if (goingLeft && turningDown) return chars.tl;  // ┌
-      if (goingLeft && turningUp) return chars.bl;    // └
-
-      if (goingDown && turningRight) return chars.bl; // └
-      if (goingDown && turningLeft) return chars.br;  // ┘
-      if (goingUp && turningRight) return chars.tl;   // ┌
-      if (goingUp && turningLeft) return chars.tr;    // ┐
-
-      return chars.cross;
     }
 
     /**
