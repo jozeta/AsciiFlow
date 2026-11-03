@@ -6,6 +6,9 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Fix ASCII import of Unicode diagrams: boxes with a connector attached (a `├ ┤ ┬ ┴` junction
+  in the border) and boxes with dashed Unicode borders were dropped; Unicode output now
+  re-imports the same as ASCII output
 - Serve Bootstrap 5.3.3 and Bootstrap Icons 1.11.3 from `vendor/` instead of jsDelivr, so the
   app makes no third-party requests and works offline
 - Validate diagrams from share links, imported or dropped JSON and localStorage: unknown modes,

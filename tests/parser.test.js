@@ -6,26 +6,65 @@ const { loadApp, plain, twoBoxes } = require('./helpers');
 
 const { AsciiRenderer, AsciiParser } = loadApp();
 
-function roundTrip(mode) {
+function roundTrip(diagram, mode) {
   const r = new AsciiRenderer();
   r.setMode(mode);
-  return plain(AsciiParser.parseAsciiToDiagram(r.render(twoBoxes())));
+  return plain(AsciiParser.parseAsciiToDiagram(r.render(diagram)));
 }
 
-test('ascii output re-imports as the same two boxes and a connector', () => {
-  const back = roundTrip('ascii');
-  const boxes = back.shapes.map(s => [s.type, s.w, s.h, s.text]);
-  assert.deepEqual(boxes, [['rectangle', 12, 5, 'Alpha'], ['rectangle', 12, 5, 'Beta']]);
-  assert.equal(back.connectors.length, 1);
+const boxesOf = (d) => d.shapes.map(s => [s.type, s.x, s.y, s.w, s.h, s.text]);
+
+// Three boxes with connectors leaving through the bottom, right and top
+// borders, so every T-junction orientation ends up in a box border.
+function threeBoxes() {
+  return {
+    shapes: [
+      { id: 'a', type: 'rectangle', x: 2, y: 2, w: 12, h: 5, text: 'Alpha' },
+      { id: 'b', type: 'rectangle', x: 2, y: 12, w: 12, h: 5, text: 'Beta' },
+      { id: 'g', type: 'rectangle', x: 24, y: 12, w: 12, h: 5, text: 'Gamma' }
+    ],
+    connectors: [
+      { id: 'c1', fromShapeId: 'a', fromAnchor: 'bottom', toShapeId: 'b', toAnchor: 'top' },
+      { id: 'c2', fromShapeId: 'b', fromAnchor: 'right', toShapeId: 'g', toAnchor: 'left' },
+      { id: 'c3', fromShapeId: 'g', fromAnchor: 'top', toShapeId: 'a', toAnchor: 'right' }
+    ],
+    texts: [],
+    notes: []
+  };
+}
+
+for (const mode of ['ascii', 'unicode', 'unicode-curved']) {
+  const type = mode === 'unicode-curved' ? 'rounded-rectangle' : 'rectangle';
+
+  test(`${mode} output re-imports as the same two boxes and a connector`, () => {
+    const back = roundTrip(twoBoxes(), mode);
+    assert.deepEqual(back.shapes.map(s => [s.type, s.w, s.h, s.text]),
+      [[type, 12, 5, 'Alpha'], [type, 12, 5, 'Beta']]);
+    assert.equal(back.connectors.length, 1);
+  });
+
+  // Regression: unicode borders with a connector attached contain T-junctions
+  // (├ ┤ ┬ ┴) and those boxes used to be dropped on import.
+  test(`${mode} output keeps boxes whose borders carry T-junctions`, () => {
+    const back = roundTrip(threeBoxes(), mode);
+    assert.deepEqual(back.shapes.map(s => s.text), ['Alpha', 'Beta', 'Gamma']);
+  });
+}
+
+test('unicode and ascii output re-import to the same boxes', () => {
+  const ascii = roundTrip(threeBoxes(), 'ascii');
+  const unicode = roundTrip(threeBoxes(), 'unicode');
+  assert.deepEqual(boxesOf(unicode), boxesOf(ascii));
+  assert.equal(unicode.connectors.length, ascii.connectors.length);
 });
 
-// Known bug: in unicode mode the box the connector leaves from has a "├"
-// T-junction in its border, and the importer then fails to recognise it as a
-// box (only "Beta" comes back, plus stray connectors). Remove `todo` once fixed.
-test('unicode output re-imports as the same two boxes and a connector', { todo: 'parser drops boxes with T-junction borders' }, () => {
-  const back = roundTrip('unicode');
-  assert.deepEqual(back.shapes.map(s => s.text), ['Alpha', 'Beta']);
-  assert.equal(back.connectors.length, 1);
+test('boxes with dashed unicode borders are recognised', () => {
+  const back = plain(AsciiParser.parseAsciiToDiagram([
+    '┌┄┄┄┄┄┄┐',
+    '┆ Edge ├───',
+    '└┄┄┄┄┄┄┘'
+  ].join('\n')));
+  assert.deepEqual(back.shapes.map(s => [s.w, s.h, s.text]), [[8, 3, 'Edge']]);
 });
 
 test('mermaid graph TD import builds shapes and labelled edges', () => {

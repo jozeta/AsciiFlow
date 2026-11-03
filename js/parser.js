@@ -43,12 +43,21 @@
       return false;
     }
 
+    // Where a connector meets a box, the renderer replaces that border cell
+    // with a junction: '+' in ascii mode, a T-piece like '├' or '┴' in
+    // unicode mode. Junctions are valid on any side, so a box with connectors
+    // attached is still recognised.
+    const BORDER_JUNCTIONS = [
+      '+', '┼', '├', '┤', '┬', '┴',
+      '╬', '╠', '╣', '╦', '╩', '╪', '╫', '╞', '╡', '╥', '╨', '╤', '╧', '╟', '╢'
+    ];
+
     function isHBorder(char) {
-      return ['-', '─', '═', '~'].includes(char);
+      return ['-', '─', '═', '~', '┄', '╌', '┈'].includes(char) || BORDER_JUNCTIONS.includes(char);
     }
 
     function isVBorder(char) {
-      return ['|', '│', '║', '┆', '┊'].includes(char);
+      return ['|', '│', '║', '┆', '┊', '╎'].includes(char) || BORDER_JUNCTIONS.includes(char);
     }
 
     // Detect rectangles and boxes
@@ -63,7 +72,7 @@
               // Verify horizontal border between c and cEnd
               let isTopH = true;
               for (let k = c + 1; k < cEnd; k++) {
-                if (!isHBorder(grid[r][k]) && grid[r][k] !== '+') {
+                if (!isHBorder(grid[r][k])) {
                   isTopH = false;
                   break;
                 }
@@ -76,7 +85,7 @@
                   // Verify bottom horizontal border
                   let isBottomH = true;
                   for (let k = c + 1; k < cEnd; k++) {
-                    if (!isHBorder(grid[rEnd][k]) && grid[rEnd][k] !== '+') {
+                    if (!isHBorder(grid[rEnd][k])) {
                       isBottomH = false;
                       break;
                     }
@@ -86,7 +95,7 @@
                   // Verify left vertical border
                   let isLeftV = true;
                   for (let k = r + 1; k < rEnd; k++) {
-                    if (!isVBorder(grid[k][c]) && grid[k][c] !== '+') {
+                    if (!isVBorder(grid[k][c])) {
                       isLeftV = false;
                       break;
                     }
@@ -96,7 +105,7 @@
                   // Verify right vertical border
                   let isRightV = true;
                   for (let k = r + 1; k < rEnd; k++) {
-                    if (!isVBorder(grid[k][cEnd]) && grid[k][cEnd] !== '+') {
+                    if (!isVBorder(grid[k][cEnd])) {
                       isRightV = false;
                       break;
                     }

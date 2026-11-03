@@ -23,9 +23,13 @@ node --test tests/               # Node 18+, no dependencies
 
 The tests load the browser scripts into a `vm` context (`tests/helpers.js`) and cover the
 renderer (both modes), ASCII/Mermaid import and `normalizeDiagram()` validation. Wrap vm results
-in `plain()` before `deepEqual` (cross-realm prototypes). One test is marked `todo`: re-importing
-Unicode output drops boxes whose border has a `├`-style T-junction. There is no linter; also
-verify UI changes in the browser (draw, connect, export, re-import).
+in `plain()` before `deepEqual` (cross-realm prototypes). There is no linter; also verify UI
+changes in the browser (draw, connect, export, re-import).
+- ASCII import must recognise everything the renderer emits on a box border, in every mode: if
+  the renderer gains a new border or junction character, add it to `isHBorder`/`isVBorder`/
+  `BORDER_JUNCTIONS` in `js/parser.js`. Known import gaps (both modes): diamonds,
+  parallelograms and titled containers are not recognised, and bent connectors come back as
+  several segments.
 
 ## Architecture
 
