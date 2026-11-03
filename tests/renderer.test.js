@@ -198,3 +198,29 @@ test('an auto-anchored chain of every shape type avoids all shapes and shared si
     assert.equal(r.render(back), first, mode);
   }
 });
+
+test('routes reused between drag frames match routing from scratch', () => {
+  // A grid of boxes; some connectors must detour around the box between them
+  const cols = 6;
+  const shapes = [];
+  for (let i = 0; i < 36; i++) {
+    shapes.push({ id: `s${i}`, type: 'rectangle', x: (i % cols) * 22, y: Math.floor(i / cols) * 10, w: 14, h: 5, text: `N${i}` });
+  }
+  const connectors = [];
+  for (let i = 0; i < 36; i++) {
+    if ((i % cols) + 1 < cols) connectors.push({ id: `a${i}`, fromShapeId: `s${i}`, toShapeId: `s${i + 1}`, fromAnchor: 'auto', toAnchor: 'auto' });
+    if ((i % cols) + 2 < cols && i % 3 === 0) connectors.push({ id: `b${i}`, fromShapeId: `s${i}`, toShapeId: `s${i + 2}`, fromAnchor: 'auto', toAnchor: 'auto' });
+  }
+  const d = { shapes, connectors, texts: [], notes: [] };
+  const live = new AsciiRenderer(); // keeps routes between frames, like the canvas
+  const moves = [[14, 1, 0], [14, 0, 3], [14, -4, 2], [7, 6, 0], [7, 0, -9], [21, -10, 4], [21, 10, -4], [7, -6, 9], [14, 3, -5]];
+  for (const [index, dx, dy] of moves) {
+    // One cell per frame, as a drag would
+    for (let step = 0; step < Math.max(Math.abs(dx), Math.abs(dy)); step++) {
+      if (step < Math.abs(dx)) shapes[index].x += Math.sign(dx);
+      if (step < Math.abs(dy)) shapes[index].y += Math.sign(dy);
+      const fresh = new AsciiRenderer();
+      assert.equal(live.render(d), fresh.render(d), `after moving s${index} to ${shapes[index].x},${shapes[index].y}`);
+    }
+  }
+});

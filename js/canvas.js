@@ -1845,10 +1845,11 @@
 
     findConnectorAt(col, row) {
       const shapeMap = this.shapeMap();
+      const routes = this.renderer.createRouteContext(shapeMap, this.diagram.connectors);
 
       for (let i = this.diagram.connectors.length - 1; i >= 0; i--) {
         const conn = this.diagram.connectors[i];
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors, routes);
         if (global.AsciiConnectors.hitTestConnector(conn, points, col, row, 1.0)) {
           return conn;
         }
@@ -1888,12 +1889,13 @@
       const cellWPx = this.cellWidth * this.zoom;
       const cellHPx = this.cellHeight * this.zoom;
       const shapeMap = this.shapeMap();
+      const routes = this.renderer.createRouteContext(shapeMap, this.diagram.connectors);
 
       for (const id of this.selectedConnectorIds) {
         const conn = this.diagram.connectors.find(c => c.id === id);
         if (!conn) continue;
 
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors, routes);
         if (!points || points.length < 2) continue;
 
         const pStart = points[0];
@@ -1940,12 +1942,13 @@
       const cellWPx = this.cellWidth * this.zoom;
       const cellHPx = this.cellHeight * this.zoom;
       const shapeMap = this.shapeMap();
+      const routes = this.renderer.createRouteContext(shapeMap, this.diagram.connectors);
 
       for (const id of this.selectedConnectorIds) {
         const conn = this.diagram.connectors.find(c => c.id === id);
         if (!conn) continue;
 
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors, routes);
         if (!points || points.length < 2) continue;
 
         for (let i = 0; i < points.length - 1; i++) {
@@ -2039,7 +2042,8 @@
       }
 
       const shapeMap = this.shapeMap();
-      const routeInfo = this.renderer.resolveConnectorRouteInfo(conn, shapeMap, this.diagram.connectors);
+      const routes = this.renderer.createRouteContext(shapeMap, this.diagram.connectors);
+      const routeInfo = this.renderer.resolveConnectorRouteInfo(conn, shapeMap, this.diagram.connectors, routes);
       const points = (routeInfo && routeInfo.points) ? routeInfo.points : [];
 
       if (points.length < 2) return conn.waypoints.length;
@@ -2202,6 +2206,7 @@
       const cellWPx = this.cellWidth * this.zoom;
       const cellHPx = this.cellHeight * this.zoom;
       const shapeMap = this.shapeMap();
+      const routes = this.renderer.createRouteContext(shapeMap, this.diagram.connectors);
 
       // 0. Draw Magnetic Alignment Guides if active
       if (this.activeGuides && this.activeGuides.length > 0) {
@@ -2370,7 +2375,7 @@
         const conn = this.diagram.connectors.find(c => c.id === id);
         if (!conn) continue;
 
-        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors);
+        const points = this.renderer.resolveConnectorPoints(conn, shapeMap, this.diagram.connectors, routes);
         if (!points || points.length < 2) continue;
 
         // Path outline

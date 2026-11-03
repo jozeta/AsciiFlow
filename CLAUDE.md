@@ -90,7 +90,12 @@ changes in the browser (draw, connect, export, re-import).
   then `routeAroundShapes()` searches the grid (uniform cost: length + turn penalty + a penalty
   for a shape side another connector already uses, see `sidesInUse()`), trying every side for
   `auto` anchors. For each pair of sides the clear, well-formed standard route is preferred, so
-  re-imported diagrams (explicit anchors) route identically. The canvas passes the diagram's
+  re-imported diagrams (explicit anchors) route identically. Performance: `createRouteContext()`
+  builds the obstacle list and side usage once per pass (and is reused while nothing changed, so
+  canvas hit-testing gets the drawn routes for free; pass it through new call sites), the search
+  runs in a window around the two shapes before widening, and each detour is kept between passes
+  until its own inputs change (`_detourMemo`, keyed by `obstacleKey()` of the searched area). A
+  test compares reused routes with routing from scratch over a simulated drag. The canvas passes the diagram's
   connectors and a shape map that includes notes (`AsciiCanvas.shapeMap()`), so hit-testing
   follows the drawn routes.
 - **Labels are placed after all connectors are drawn** (`renderConnectorLabel`): on the line

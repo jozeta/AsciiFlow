@@ -487,8 +487,9 @@
       // another connector's arrowhead or junction
       if (diagram.connectors) {
         const labels = [];
+        const routeContext = this.createRouteContext(shapeMap, diagram.connectors);
         for (const conn of diagram.connectors) {
-          this.renderConnector(grid, conn, shapeMap, chars, labels, diagram.connectors);
+          this.renderConnector(grid, conn, shapeMap, chars, labels, diagram.connectors, routeContext);
         }
         for (const { conn, points } of labels) {
           this.renderConnectorLabel(grid, conn, points);
@@ -1129,8 +1130,8 @@
     /**
      * Render Orthogonal or Straight Connector with clean border junctions and customizable arrows
      */
-    renderConnector(grid, conn, shapeMap, chars, pendingLabels = null, connectors = null) {
-      const routeInfo = this.resolveConnectorRouteInfo(conn, shapeMap, connectors);
+    renderConnector(grid, conn, shapeMap, chars, pendingLabels = null, connectors = null, routeContext = null) {
+      const routeInfo = this.resolveConnectorRouteInfo(conn, shapeMap, connectors, routeContext);
       if (!routeInfo || !routeInfo.points || routeInfo.points.length < 2) return;
 
       const points = routeInfo.points;
@@ -1269,7 +1270,18 @@
      * connectors: the diagram's connectors, so a re-route around shapes can
      * avoid the sides other connectors already use (optional)
      */
-    resolveConnectorRouteInfo(conn, shapeMap, connectors = null) {
+    resolveConnectorRouteInfo(conn, shapeMap, connectors = null, ctx = null) {
+      // A route context (see createRouteContext) shares the obstacle list
+      // and side usage between all connectors of one pass and remembers
+      // finished routes; without one, a context is made for this call
+      if (!ctx && connectors) ctx = this.createRouteContext(shapeMap, connectors);
+      if (ctx && ctx.routes.has(conn)) return ctx.routes.get(conn);
+      const info = this.computeConnectorRouteInfo(conn, shapeMap, ctx);
+      if (ctx) ctx.routes.set(conn, info);
+      return info;
+    }
+
+    computeConnectorRouteInfo(conn, shapeMap, ctx) {
       const shapeFrom = conn.fromShapeId ? shapeMap.get(conn.fromShapeId) : null;
       const shapeTo = conn.toShapeId ? shapeMap.get(conn.toShapeId) : null;
       const hasArrow = conn.arrowEnd !== 'none';
@@ -1348,14 +1360,34 @@
         const fromAnchor = conn.fromAnchor || 'auto';
         const toAnchor = conn.toAnchor || 'auto';
         const info = this.calculateOptimalRouteInfo(shapeFrom, shapeTo, fromAnchor, toAnchor, hasArrow);
-        const obstacles = this.routeObstacles(shapeMap);
+        const obstacles = ctx ? ctx.obstacles : this.routeObstacles(shapeMap);
         const sides = this.defaultSides(shapeFrom, shapeTo);
         const fromSide = fromAnchor === 'auto' ? sides.from : fromAnchor;
         const toSide = toAnchor === 'auto' ? sides.to : toAnchor;
         if (this.routeIsWellFormed(info.points, fromSide, toSide) &&
             !this.routeCrossesShapes(info.points, obstacles, shapeFrom, shapeTo)) return info;
-        const usedSides = this.sidesInUse(conn, shapeMap, connectors, obstacles);
-        return this.routeAroundShapes(shapeFrom, shapeTo, fromAnchor, toAnchor, hasArrow, obstacles, usedSides) || info;
+        const sideUsed = ctx
+          ? (key) => (ctx.sideCounts.get(key) || 0) - ((ctx.sidesOf.get(conn) || []).includes(key) ? 1 : 0) > 0
+          : () => false;
+
+        // Detours are kept between passes (e.g. drag frames) and reused while
+        // nothing they depend on changed: this connector, its two shapes,
+        // which of their sides are in use, and the shapes in the searched area
+        const SIDES = ['right', 'bottom', 'left', 'top'];
+        const geometry = (sh) => `${sh.id},${sh.type},${sh.x},${sh.y},${sh.w},${sh.h}`;
+        const base = [conn.id, fromAnchor, toAnchor, hasArrow, geometry(shapeFrom), geometry(shapeTo),
+          SIDES.map(sd => (sideUsed(`${shapeFrom.id}:${sd}`) ? 1 : 0) + (sideUsed(`${shapeTo.id}:${sd}`) ? 2 : 0)).join('')
+        ].join('|');
+        const memo = this._detourMemo || (this._detourMemo = new Map());
+        const kept = memo.get(conn.id);
+        if (kept && kept.base === base && kept.area === this.obstacleKey(obstacles, kept.window)) return kept.info;
+
+        const detour = this.routeAroundShapes(shapeFrom, shapeTo, fromAnchor, toAnchor, hasArrow, obstacles, sideUsed);
+        const result = detour ? { points: detour.points, sourceJunction: detour.sourceJunction } : info;
+        const window = detour ? detour.window : null;
+        memo.set(conn.id, { base, window, area: this.obstacleKey(obstacles, window), info: result });
+        if (memo.size > 5000) memo.clear();
+        return result;
       }
 
       // 3. ShapeFrom attached, To is free point
@@ -1685,22 +1717,43 @@
     }
 
     /**
-     * Sides of shapes that other connectors already attach to, as
-     * "shapeId:side". Explicit anchors count as given; an 'auto' anchor
-     * counts as its default side when that default route is kept (it does
-     * not cross a shape). Connectors that are themselves re-routed are
-     * left out, which keeps this independent of connector order.
+     * Shared state for routing every connector of a diagram: the shapes to
+     * avoid, which shape sides connectors already use ("shapeId:side" ->
+     * count; explicit anchors count as given, an 'auto' anchor as its
+     * default side when that default route is kept), and finished routes.
+     * The last context is reused while shapes and connectors are unchanged,
+     * so hit-testing between frames does not route everything again.
      */
-    sidesInUse(conn, shapeMap, connectors, obstacles) {
-      const used = new Set();
-      if (!connectors) return used;
-      for (const other of connectors) {
-        if (other === conn || other.routing === 'straight') continue;
+    createRouteContext(shapeMap, connectors) {
+      const parts = [];
+      for (const s of new Set(shapeMap.values())) {
+        if (s) parts.push(s.id, s.type, s.x, s.y, s.w, s.h);
+      }
+      parts.push('|');
+      for (const c of connectors || []) {
+        parts.push(c.id, c.fromShapeId, c.toShapeId, c.fromAnchor, c.toAnchor, c.arrowEnd, c.routing,
+          JSON.stringify(c.waypoints || null), JSON.stringify(c.fromPoint || null), JSON.stringify(c.toPoint || null));
+      }
+      const sig = parts.join('\u0001');
+      if (this._routeContext && this._routeContext.sig === sig && this._routeContext.connectors === connectors) {
+        return this._routeContext;
+      }
+
+      const obstacles = this.routeObstacles(shapeMap);
+      const sideCounts = new Map();
+      const sidesOf = new Map();
+      const use = (conn, key) => {
+        sideCounts.set(key, (sideCounts.get(key) || 0) + 1);
+        if (!sidesOf.has(conn)) sidesOf.set(conn, []);
+        sidesOf.get(conn).push(key);
+      };
+      for (const other of connectors || []) {
+        if (other.routing === 'straight') continue;
         const f = other.fromShapeId ? shapeMap.get(other.fromShapeId) : null;
         const t = other.toShapeId ? shapeMap.get(other.toShapeId) : null;
         if (!f || !t || (other.waypoints && other.waypoints.length)) {
-          if (f && other.fromAnchor && other.fromAnchor !== 'auto') used.add(`${f.id}:${other.fromAnchor}`);
-          if (t && other.toAnchor && other.toAnchor !== 'auto') used.add(`${t.id}:${other.toAnchor}`);
+          if (f && other.fromAnchor && other.fromAnchor !== 'auto') use(other, `${f.id}:${other.fromAnchor}`);
+          if (t && other.toAnchor && other.toAnchor !== 'auto') use(other, `${t.id}:${other.toAnchor}`);
           continue;
         }
         let fa = other.fromAnchor || 'auto';
@@ -1708,18 +1761,32 @@
         if (fa === 'auto' || ta === 'auto') {
           const info = this.calculateOptimalRouteInfo(f, t, fa, ta, other.arrowEnd !== 'none');
           if (this.routeCrossesShapes(info.points, obstacles, f, t)) {
-            if (fa !== 'auto') used.add(`${f.id}:${fa}`);
-            if (ta !== 'auto') used.add(`${t.id}:${ta}`);
+            if (fa !== 'auto') use(other, `${f.id}:${fa}`);
+            if (ta !== 'auto') use(other, `${t.id}:${ta}`);
             continue;
           }
           const sides = this.defaultSides(f, t);
           if (fa === 'auto') fa = sides.from;
           if (ta === 'auto') ta = sides.to;
         }
-        used.add(`${f.id}:${fa}`);
-        used.add(`${t.id}:${ta}`);
+        use(other, `${f.id}:${fa}`);
+        use(other, `${t.id}:${ta}`);
       }
-      return used;
+      this._routeContext = { sig, connectors, obstacles, sideCounts, sidesOf, routes: new Map() };
+      return this._routeContext;
+    }
+
+    /**
+     * The shapes inside an area (all of them when area is null), as a string
+     * that changes when any of them moves, resizes or changes type
+     */
+    obstacleKey(obstacles, area) {
+      const parts = [];
+      for (const o of obstacles) {
+        if (area && (o.x1 < area.minX || o.x0 > area.maxX || o.y1 < area.minY || o.y0 > area.maxY)) continue;
+        parts.push(o.shape.id, o.shape.type, o.x0, o.y0, o.x1, o.y1);
+      }
+      return parts.join(',');
     }
 
     /**
@@ -1747,84 +1814,123 @@
 
     /**
      * Cheapest orthogonal route that avoids every shape: a uniform-cost
-     * search over (cell, direction) with a penalty per turn. With 'auto'
-     * anchors every side of both shapes is tried. Returns null when the
-     * search area is too large or nothing fits.
+     * search over (cell, direction) with a penalty per turn and per shape
+     * side another connector already uses. With 'auto' anchors every side
+     * of both shapes is tried; for each pair of sides a clear, well-formed
+     * standard route is preferred (so explicit anchors route identically).
+     * The search first looks in a window around the two shapes and only
+     * widens to the whole diagram when nothing fits there.
      */
-    routeAroundShapes(fromShape, toShape, fromAnchor, toAnchor, hasArrow, obstacles, usedSides = new Set()) {
+    routeAroundShapes(fromShape, toShape, fromAnchor, toAnchor, hasArrow, obstacles, sideUsed = () => false) {
       const SIDES = ['right', 'bottom', 'left', 'top'];
       const TURN = 4;
       const SHARED_SIDE = 40; // sharing a side with another connector overlaps lines
       const fromSides = fromAnchor === 'auto' ? SIDES : [fromAnchor];
       const toSides = toAnchor === 'auto' ? SIDES : [toAnchor];
-
-      // Search area: everything involved, plus a margin to go around
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const o of obstacles) {
-        minX = Math.min(minX, o.x0); minY = Math.min(minY, o.y0);
-        maxX = Math.max(maxX, o.x1); maxY = Math.max(maxY, o.y1);
-      }
-      minX -= 3; minY -= 3; maxX += 3; maxY += 3;
-      const gw = maxX - minX + 1, gh = maxY - minY + 1;
-      if (gw * gh > 250000) return null;
-
-      const blocked = new Uint8Array(gw * gh);
-      for (const o of obstacles) {
-        for (let y = o.y0; y <= o.y1; y++) {
-          for (let x = o.x0; x <= o.x1; x++) blocked[(y - minY) * gw + (x - minX)] = 1;
-        }
-      }
       const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
       const dirIndex = (d) => DIRS.findIndex(v => v[0] === d[0] && v[1] === d[1]);
 
+      // Every pair of sides, with the clear standard route where there is one
       let best = null;
+      const searchPairs = [];
       for (const fa of fromSides) {
         for (const ta of toSides) {
           const ep = this.routeEndpoints(fromShape, toShape, fa, ta, hasArrow);
-          const inside = (p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
-          if (!inside(ep.start) || !inside(ep.end)) continue;
-          if (blocked[(ep.start.y - minY) * gw + (ep.start.x - minX)]) continue;
-          // Without an arrowhead the route ends on the target's border
-          const endKey = (ep.end.y - minY) * gw + (ep.end.x - minX);
-
-          // Dial's algorithm: integer costs, buckets per cost
-          const size = gw * gh * 4;
-          const dist = new Int32Array(size).fill(-1);
-          const prev = new Int32Array(size).fill(-1);
-          const buckets = [];
-          const push = (state, cost, from) => {
-            if (dist[state] !== -1 && dist[state] <= cost) return;
-            dist[state] = cost;
-            prev[state] = from;
-            (buckets[cost] || (buckets[cost] = [])).push(state);
-          };
-          const startState = ((ep.start.y - minY) * gw + (ep.start.x - minX)) * 4 + dirIndex(ep.startDir);
-          const sidePenalty = (usedSides.has(`${fromShape.id}:${fa}`) ? SHARED_SIDE : 0) +
-            (usedSides.has(`${toShape.id}:${ta}`) ? SHARED_SIDE : 0);
-
-          // For these sides, the standard route wins when it is clear: then
-          // the same diagram with these anchors set explicitly (e.g. after
-          // re-import) routes identically
+          const penalty = (sideUsed(`${fromShape.id}:${fa}`) ? SHARED_SIDE : 0) +
+            (sideUsed(`${toShape.id}:${ta}`) ? SHARED_SIDE : 0);
           const standard = this.calculateOptimalRouteInfo(fromShape, toShape, fa, ta, hasArrow);
           if (this.routeIsWellFormed(standard.points, fa, ta) &&
               !this.routeCrossesShapes(standard.points, obstacles, fromShape, toShape)) {
             const pts = standard.points;
             let len = 0;
             for (let i = 0; i < pts.length - 1; i++) len += Math.abs(pts[i + 1].x - pts[i].x) + Math.abs(pts[i + 1].y - pts[i].y);
-            const cost = sidePenalty + len + TURN * Math.max(0, pts.length - 2);
+            const cost = penalty + len + TURN * Math.max(0, pts.length - 2);
             if (!best || cost < best.cost) best = { cost, points: pts, sourceJunction: standard.sourceJunction };
             continue;
           }
-          push(startState, sidePenalty, -1);
+          // Lower bound for a searched route: distance plus the turns it needs
+          const lower = penalty + Math.abs(ep.end.x - ep.start.x) + Math.abs(ep.end.y - ep.start.y) +
+            (ep.startDir[0] === ep.endDir[0] && ep.startDir[1] === ep.endDir[1] ? 0 : TURN);
+          searchPairs.push({ fa, ta, ep, penalty, lower });
+        }
+      }
+      searchPairs.sort((a, b) => a.lower - b.lower);
+
+      // Full extent of the diagram, for the widest search
+      let fullMinX = Infinity, fullMinY = Infinity, fullMaxX = -Infinity, fullMaxY = -Infinity;
+      for (const o of obstacles) {
+        fullMinX = Math.min(fullMinX, o.x0); fullMinY = Math.min(fullMinY, o.y0);
+        fullMaxX = Math.max(fullMaxX, o.x1); fullMaxY = Math.max(fullMaxY, o.y1);
+      }
+      const shapesBox = {
+        x0: Math.min(fromShape.x, toShape.x), y0: Math.min(fromShape.y, toShape.y),
+        x1: Math.max(fromShape.x + fromShape.w - 1, toShape.x + toShape.w - 1),
+        y1: Math.max(fromShape.y + fromShape.h - 1, toShape.y + toShape.h - 1)
+      };
+      const windows = [8, 24].map(m => ({
+        minX: Math.round(shapesBox.x0) - m, minY: Math.round(shapesBox.y0) - m,
+        maxX: Math.round(shapesBox.x1) + m, maxY: Math.round(shapesBox.y1) + m
+      }));
+      windows.push({ minX: fullMinX - 3, minY: fullMinY - 3, maxX: fullMaxX + 3, maxY: fullMaxY + 3 });
+
+      // The result depends on the shapes inside the window it was decided in
+      // (at least the 24-cell one, which holds every standard route)
+      let decidedIn = null;
+      // Nothing to search when a standard route already beats every bound
+      if (best && searchPairs.every(pair => pair.lower >= best.cost)) {
+        return { points: best.points, sourceJunction: best.sourceJunction, window: windows[1] };
+      }
+      for (let wi = 0; wi < windows.length; wi++) {
+        const win = windows[wi];
+        const { minX, minY, maxX, maxY } = win;
+        const gw = maxX - minX + 1, gh = maxY - minY + 1;
+        if (gw <= 0 || gh <= 0 || gw * gh > 250000) continue;
+
+        const blocked = new Uint8Array(gw * gh);
+        for (const o of obstacles) {
+          const x0 = Math.max(o.x0, minX), x1 = Math.min(o.x1, maxX);
+          const y0 = Math.max(o.y0, minY), y1 = Math.min(o.y1, maxY);
+          for (let y = y0; y <= y1; y++) blocked.fill(1, (y - minY) * gw + (x0 - minX), (y - minY) * gw + (x1 - minX) + 1);
+        }
+
+        // Search buffers, kept between calls; a stamp marks entries of this search
+        const size = gw * gh * 4;
+        if (!this._routeBuffers || this._routeBuffers.dist.length < size) {
+          this._routeBuffers = { dist: new Int32Array(size), prev: new Int32Array(size), stamp: new Uint32Array(size), gen: 0 };
+        }
+        const buf = this._routeBuffers;
+        const inside = (p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
+        let foundAny = false;
+
+        for (const pair of searchPairs) {
+          if (best && pair.lower >= best.cost) break;
+          const { ep } = pair;
+          if (!inside(ep.start) || !inside(ep.end)) continue;
+          if (blocked[(ep.start.y - minY) * gw + (ep.start.x - minX)]) continue;
+          const endKey = (ep.end.y - minY) * gw + (ep.end.x - minX);
+
+          buf.gen = (buf.gen + 1) >>> 0;
+          if (buf.gen === 0) { buf.stamp.fill(0); buf.gen = 1; }
+          const gen = buf.gen;
+          const buckets = [];
+          const push = (state, cost, from) => {
+            if (buf.stamp[state] === gen && buf.dist[state] <= cost) return;
+            buf.stamp[state] = gen;
+            buf.dist[state] = cost;
+            buf.prev[state] = from;
+            (buckets[cost] || (buckets[cost] = [])).push(state);
+          };
+          const startState = ((ep.start.y - minY) * gw + (ep.start.x - minX)) * 4 + dirIndex(ep.startDir);
+          push(startState, pair.penalty, -1);
           const wantDir = dirIndex(ep.endDir);
-          let found = -1;
           const limit = best ? best.cost : Infinity;
-          for (let cost = 0; cost < buckets.length && cost < limit && found < 0; cost++) {
+          let found = -1;
+          for (let cost = pair.penalty; cost < buckets.length && cost < limit && found < 0; cost++) {
             const bucket = buckets[cost];
             if (!bucket) continue;
             for (let i = 0; i < bucket.length; i++) {
               const state = bucket[i];
-              if (dist[state] !== cost) continue;
+              if (buf.dist[state] !== cost) continue;
               const cell = state >> 2, dir = state & 3;
               if (cell === endKey && dir === wantDir) { found = state; break; }
               const cx = cell % gw, cy = (cell - cx) / gw;
@@ -1841,27 +1947,33 @@
             }
           }
           if (found < 0) continue;
-          const cost = dist[found];
+          foundAny = true;
+          const cost = buf.dist[found];
           if (best && cost >= best.cost) continue;
 
           // Walk back, keeping the cells where the direction changes
           const cells = [];
-          for (let st = found; st !== -1; st = prev[st]) {
+          for (let st = found; st !== -1; st = buf.prev[st]) {
             const cell = st >> 2;
             cells.push({ x: (cell % gw) + minX, y: Math.floor(cell / gw) + minY });
           }
           cells.reverse();
           best = { cost, points: this.simplifyWaypoints(cells), sourceJunction: ep.sourceJunction };
         }
+        // A route found in this window: wider windows can only add longer ones
+        if (foundAny || (best && !searchPairs.length)) {
+          decidedIn = wi < windows.length - 1 ? windows[Math.max(wi, 1)] : null;
+          break;
+        }
       }
-      return best ? { points: best.points, sourceJunction: best.sourceJunction } : null;
+      return best ? { points: best.points, sourceJunction: best.sourceJunction, window: decidedIn } : null;
     }
 
     /**
      * Compute waypoints for connector based on connected shapes or free points
      */
-    resolveConnectorPoints(conn, shapeMap, connectors = null) {
-      const info = this.resolveConnectorRouteInfo(conn, shapeMap, connectors);
+    resolveConnectorPoints(conn, shapeMap, connectors = null, ctx = null) {
+      const info = this.resolveConnectorRouteInfo(conn, shapeMap, connectors, ctx);
       return info && info.points ? info.points : (conn.points || []);
     }
 

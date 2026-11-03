@@ -6,7 +6,10 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
-Nothing yet.
+- Much faster routing on big diagrams: dragging a shape in a diagram with 100 shapes now keeps up
+  with the screen (16.7 ms per move, was 64 ms; 400 shapes: was 535 ms). Routes are shared
+  between drawing and hit-testing, searched in a window around the shapes first, and kept between
+  frames until something they depend on changes; output is unchanged
 
 ## 1.0.0 - 2026-11-03
 
