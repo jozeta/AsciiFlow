@@ -1692,13 +1692,18 @@
       this.render();
     }
 
-    loadDiagram(data) {
+    /**
+     * Replace the current diagram. With { undoable: true } the replacement is
+     * one undo step (New, Templates); otherwise history starts afresh
+     * (imports, share links, the diagram restored on startup).
+     */
+    loadDiagram(data, { undoable = false } = {}) {
       if (this.editingShape) this.finishTextEditing();
       this.diagram = global.AsciiStorage.normalizeDiagram(data);
       this.renderer.setMode(this.diagram.mode || 'unicode');
       this.selectedShapeIds.clear();
       this.selectedConnectorIds.clear();
-      this.history.clear();
+      if (!undoable) this.history.clear();
       this.recordHistory();
       this.emitSelectionChange();
       this.emitChange();
@@ -1706,7 +1711,7 @@
       this.render();
     }
 
-    clearDiagram() {
+    clearDiagram(options = {}) {
       this.loadDiagram({
         version: 1,
         name: 'Untitled Diagram',
@@ -1715,7 +1720,7 @@
         connectors: [],
         texts: [],
         notes: []
-      });
+      }, options);
     }
 
     // ==========================================
@@ -1731,6 +1736,7 @@
       const prev = this.history.undo(this.diagram);
       if (prev) {
         this.diagram = global.AsciiStorage.normalizeDiagram(prev);
+        this.renderer.setMode(this.diagram.mode || 'unicode');
         this.selectedShapeIds.clear();
         this.selectedConnectorIds.clear();
         this.emitSelectionChange();
@@ -1744,6 +1750,7 @@
       const next = this.history.redo(this.diagram);
       if (next) {
         this.diagram = global.AsciiStorage.normalizeDiagram(next);
+        this.renderer.setMode(this.diagram.mode || 'unicode');
         this.selectedShapeIds.clear();
         this.selectedConnectorIds.clear();
         this.emitSelectionChange();
@@ -1786,9 +1793,15 @@
       if (diagWPx > 0 && diagHPx > 0) {
         const scaleX = (rect.width - 80) / diagWPx;
         const scaleY = (rect.height - 80) / diagHPx;
-        this.zoom = Math.min(1.2, Math.max(0.6, Math.min(scaleX, scaleY)));
-        this.panX = Math.floor((rect.width - diagWPx * this.zoom) / 2) - bounds.minCol * this.cellWidth * this.zoom;
-        this.panY = Math.floor((rect.height - diagHPx * this.zoom) / 2) - bounds.minRow * this.cellHeight * this.zoom;
+        this.zoom = Math.min(1.2, Math.max(this.minZoom, Math.min(scaleX, scaleY)));
+        // Centre the diagram on each axis where it fits; where it is still too
+        // big at the minimum zoom, show it from its top/left edge rather than
+        // the middle of its bounding box, which may be empty space
+        const fitOffset = (viewPx, diagPx) => (diagPx * this.zoom <= viewPx - 80
+          ? Math.floor((viewPx - diagPx * this.zoom) / 2)
+          : 40);
+        this.panX = fitOffset(rect.width, diagWPx) - bounds.minCol * this.cellWidth * this.zoom;
+        this.panY = fitOffset(rect.height, diagHPx) - bounds.minRow * this.cellHeight * this.zoom;
       } else {
         this.panX = 60;
         this.panY = 60;

@@ -13,7 +13,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 ## Key Features
 
 - **Bidirectional Text & Code Import**:
-  - **ASCII Reverse Engineering**: Paste raw ASCII / Unicode text diagrams. AsciiFlow turns them back into editable shapes: rectangles, rounded boxes, circles, diamonds, parallelograms, notes and titled containers (with the shapes nested inside them), plus connectors traced around corners and through crossings, attached to the shapes they touch, with their arrowheads and labels. Any other text becomes free text labels. Hexagons, triangles, databases, clouds and queues are not recognised yet; their text is kept as free text.
+  - **ASCII Reverse Engineering**: Paste raw ASCII / Unicode text diagrams. AsciiFlow turns them back into editable shapes: every shape type it can draw (rectangles, rounded boxes, circles, diamonds, parallelograms, hexagons, triangles, databases, clouds, queues, notes and titled containers with the shapes nested inside them), plus connectors traced around corners, through crossings and across junctions where they split or merge, attached to the shapes they touch, with their arrowheads and labels. Any other text becomes free text labels. A diagram copied out of AsciiFlow re-imports to the same diagram.
   - **Mermaid Flowchart Import**: Paste Mermaid `graph TD` or `graph LR` syntax. Nodes, shapes, edge types, and labels are automatically parsed and arranged hierarchically with auto-layout!
   - **Shareable URL Hash**: Generate instant shareable links with the diagram data URL-encoded into `#diagram=...` for frictionless collaboration without a backend database.
 - **Smart Alignment & Auto-Layout**:

@@ -116,8 +116,8 @@ for (const key of Object.keys(SAMPLE_TEMPLATES)) {
   }
 }
 
-test('templates whose labels survive rendering keep them on re-import', () => {
-  for (const key of ['flowchart', 'decision']) {
+test('every template keeps its connector labels on re-import', () => {
+  for (const key of Object.keys(SAMPLE_TEMPLATES)) {
     const r = new AsciiRenderer();
     r.setMode('unicode');
     const src = AsciiStorage.getSample(key);
@@ -125,12 +125,74 @@ test('templates whose labels survive rendering keep them on re-import', () => {
   }
 });
 
-test('the decision template re-renders identically after re-import', () => {
-  for (const mode of ['unicode', 'ascii']) {
-    const r = new AsciiRenderer();
+test('every template re-renders identically after re-import', () => {
+  for (const key of Object.keys(SAMPLE_TEMPLATES)) {
+    for (const mode of ['unicode', 'ascii']) {
+      const r = new AsciiRenderer();
+      r.setMode(mode);
+      const first = r.render(AsciiStorage.getSample(key));
+      assert.equal(r.render(parse(first)), first, `${key} ${mode}`);
+    }
+  }
+});
+
+test('a connector that splits at a junction comes back as one connector per branch', () => {
+  const r = new AsciiRenderer();
+  r.setMode('unicode');
+  const back = parse(r.render(AsciiStorage.getSample('architecture')));
+  const name = (id) => back.shapes.find(s => s.id === id).text.split('\n')[0];
+  const fromGateway = back.connectors
+    .filter(c => c.fromShapeId && name(c.fromShapeId) === 'API Gateway')
+    .map(c => [name(c.toShapeId), c.label]).sort();
+  assert.deepEqual(fromGateway, [['Auth Service', 'gRPC'], ['Order Service', 'REST']]);
+});
+
+const MORE_SHAPES = ['hexagon', 'triangle', 'database', 'cloud', 'queue'];
+const SIZES = [[10, 3], [12, 4], [14, 4], [16, 5], [18, 6], [20, 5], [22, 6], [24, 7], [30, 9]];
+
+test('hexagons, triangles, databases, clouds and queues are recognised at every size', () => {
+  const r = new AsciiRenderer();
+  for (const mode of ['unicode', 'ascii', 'unicode-curved']) {
     r.setMode(mode);
-    const first = r.render(AsciiStorage.getSample('decision'));
-    assert.equal(r.render(parse(first)), first, mode);
+    for (const type of MORE_SHAPES) {
+      for (const [w, h] of SIZES) {
+        const back = parse(r.render({ shapes: [{ id: 's', type, x: 0, y: 2, w, h, text: 'Ab' }], connectors: [], texts: [], notes: [] }));
+        const where = `${mode} ${type} ${w}x${h}`;
+        assert.deepEqual(back.shapes.map(s => [s.type, s.w, s.h]), [[type, w, h]], where);
+        // A 3-row database has no room for text
+        if (!(type === 'database' && h === 3)) assert.equal(back.shapes[0].text, 'Ab', where);
+      }
+    }
+  }
+});
+
+test('a diagram with every shape type and connectors between them round-trips exactly', () => {
+  const types = ['rectangle', 'rounded-rectangle', 'circle', 'diamond', 'parallelogram',
+    'hexagon', 'triangle', 'database', 'cloud', 'queue'];
+  const shapes = types.map((type, i) => ({
+    id: type, type, x: 2 + (i % 4) * 30, y: 2 + Math.floor(i / 4) * 14, w: 20, h: 7, text: type.slice(0, 8)
+  }));
+  const connectors = [];
+  for (let i = 0; i + 1 < types.length; i++) {
+    if (Math.floor(i / 4) === Math.floor((i + 1) / 4)) {
+      connectors.push({ id: `h${i}`, fromShapeId: types[i], toShapeId: types[i + 1],
+        fromAnchor: 'right', toAnchor: 'left', label: i % 3 === 0 ? `L${i}` : '' });
+    }
+  }
+  for (let i = 0; i + 4 < types.length; i += 4) {
+    connectors.push({ id: `v${i}`, fromShapeId: types[i], toShapeId: types[i + 4],
+      fromAnchor: 'bottom', toAnchor: 'top', label: 'down' });
+  }
+  const d = { shapes, connectors, texts: [], notes: [] };
+  const r = new AsciiRenderer();
+  for (const mode of ['unicode', 'ascii']) {
+    r.setMode(mode);
+    const first = r.render(d);
+    const back = parse(first);
+    assert.deepEqual(back.shapes.map(s => s.type).sort(), types.slice().sort(), mode);
+    assert.equal(back.connectors.length, connectors.length, mode);
+    assert.ok(back.connectors.every(c => c.fromShapeId && c.toShapeId), `${mode}: all attached`);
+    assert.equal(r.render(back), first, mode);
   }
 });
 

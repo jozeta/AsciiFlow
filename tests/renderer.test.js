@@ -90,6 +90,22 @@ test("a connector starting on another's arrowhead does not erase it", () => {
   assert.match(render(d, 'ascii'), /v-+\+/);
 });
 
+test('labels never hide arrowheads, junctions or other labels', () => {
+  const flow = render(AsciiStorage.getSample('flowchart'), 'unicode');
+  assert.match(flow, /─►│Issue JWT Token/, 'arrow into Grant Access is visible');
+  assert.match(flow, /Yes/);
+
+  const arch = render(AsciiStorage.getSample('architecture'), 'unicode');
+  for (const label of ['HTTPS', 'gRPC', 'REST']) assert.ok(arch.includes(label), label);
+  assert.match(arch, /├─────┤/, 'the split junction is visible');
+});
+
+test('labels that already fit on their line stay where they were', () => {
+  const decision = render(AsciiStorage.getSample('decision'), 'unicode');
+  assert.match(decision, />── Yes ─►</);
+  assert.match(decision, /\n {40}No\n/);
+});
+
 for (const key of Object.keys(SAMPLE_TEMPLATES)) {
   test(`template "${key}" renders in both modes`, () => {
     const d = AsciiStorage.getSample(key);

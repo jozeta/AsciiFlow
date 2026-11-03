@@ -26,16 +26,21 @@ renderer (both modes), ASCII/Mermaid import and `normalizeDiagram()` validation.
 in `plain()` before `deepEqual` (cross-realm prototypes). There is no linter; also verify UI
 changes in the browser (draw, connect, export, re-import).
 - CI (`.github/workflows/ci.yml`) runs `node --check` on `js/` and `tests/` plus the test suite.
-- **ASCII import (`parseAsciiToDiagram`) mirrors the renderer's geometry.** It detects shapes in
-  order (boxes/containers/notes → circles → diamonds → parallelograms), then traces connectors
-  as paths through `LINE_GLYPHS` (straight through crossings, turning at corners, stepping over
-  labels drawn on the line), attaches open ends to the shape whose outline (`owner`) they touch,
-  and keeps leftover words as `texts`. If you change how the renderer draws a shape, border,
-  junction or label, update the matching detector and run the template round-trip tests. Not
-  recognised yet: hexagon, triangle, database, cloud, queue (their text becomes free text).
-- Two things in the renderer's own output lose information, so round trips are not exact:
-  connector labels are drawn over the line and can hide an arrowhead or a junction, and
-  connectors sharing a segment put their labels on the same spot.
+- **ASCII import (`parseAsciiToDiagram`) mirrors the renderer.** Shapes: boxes/containers/notes
+  and circles, diamonds and parallelograms have hand-written detectors; databases, queues,
+  hexagons, triangles and clouds are guessed from a landmark (`<…>`, `^` over a base, `(…)`) and
+  confirmed by `verifyShape()`, which renders that shape type at the guessed box with the real
+  renderer and compares outlines, so their geometry never needs copying. Connectors are traced
+  through `LINE_GLYPHS` as pieces between ends and T-junctions (straight through crossings,
+  turning at corners, stepping over labels), pieces are joined at junctions (arrowhead side =
+  target) into fan-out/fan-in connectors, ends attach to the shape they touch (`owner`, or its
+  bounding box), labels beside a line are attached to it, and leftover words become `texts`.
+  The template round-trip tests require an identical re-render: if you change how the renderer
+  draws a shape, junction or label, keep them passing.
+- **Undo history:** the canvas records a snapshot after every change, so the top of the undo
+  stack is the current state and `undo()` returns the entry below it. `loadDiagram(data,
+  { undoable: true })` replaces the diagram as one undo step (New, Templates); without it,
+  history starts afresh (imports, share links, startup).
 
 ## Architecture
 
@@ -66,6 +71,10 @@ changes in the browser (draw, connect, export, re-import).
   with what is already there, so corners, T-junctions and crossings (including where a connector
   meets a straight shape border) come from `getLineGlyph()`. Junction names describe the stem:
   `t_down` is `┬`, `t_up` is `┴`.
+- **Labels are placed after all connectors are drawn** (`renderConnectorLabel`): on the line
+  where only that connector's own straight line is covered and its line, junction or arrow stays
+  visible on both sides; otherwise slid along the line, on another segment, or beside the line;
+  the old mid-segment spot is only the last resort.
 - **Grid geometry:** canvas cell is 10×18 px; screen → cell via
   `col = floor((x - panX) / (cellWidth * zoom))`. Keep renderer and canvas in agreement.
 - Every renderer change must work in both `unicode` and `ascii` modes.

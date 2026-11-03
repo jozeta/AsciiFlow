@@ -158,11 +158,10 @@
     const btnNew = document.getElementById('btnNew');
     if (btnNew) {
       btnNew.addEventListener('click', () => {
-        if (confirm('Create a new blank diagram? Any unsaved changes will be lost.')) {
-          canvas.clearDiagram();
-          window.AsciiStorage.clearAutoSave();
-          updateAsciiPreview();
-        }
+        const hadContent = diagramHasContent();
+        canvas.clearDiagram({ undoable: true });
+        updateAsciiPreview();
+        if (hadContent) showToast('Started a new diagram', 'success', undoAction());
       });
     }
 
@@ -174,12 +173,10 @@
         const templateKey = item.getAttribute('data-template');
         const sample = window.AsciiStorage.getSample(templateKey);
         if (sample) {
-          if (canvas.diagram.shapes.length > 0) {
-            if (!confirm(`Replace current diagram with ${sample.name}?`)) return;
-          }
-          canvas.loadDiagram(sample);
+          const hadContent = diagramHasContent();
+          canvas.loadDiagram(sample, { undoable: true });
           updateAsciiPreview();
-          showToast(`Loaded ${sample.name} template`);
+          showToast(`Loaded ${sample.name} template`, 'success', hadContent ? undoAction() : null);
         }
       });
     });
@@ -800,12 +797,29 @@
     }
   }
 
+  function diagramHasContent() {
+    const d = canvas.diagram;
+    return [d.shapes, d.connectors, d.texts, d.notes].some(list => list && list.length > 0);
+  }
+
+  // Toast action that undoes the replacement that was just made
+  function undoAction() {
+    return {
+      label: 'Undo',
+      onClick: () => {
+        canvas.undo();
+        updateAsciiPreview();
+      }
+    };
+  }
+
   /**
    * Show a short status message in the toast.
-   * type: 'success' (default) or 'error'. Built with DOM nodes, never innerHTML,
-   * because messages can include text from imported files.
+   * type: 'success' (default) or 'error'. action: optional { label, onClick }
+   * shown as a button. Built with DOM nodes, never innerHTML, because
+   * messages can include text from imported files.
    */
-  function showToast(message, type = 'success') {
+  function showToast(message, type = 'success', action = null) {
     const toastBody = document.getElementById('toastBody');
     if (toastBody) {
       const icon = document.createElement('i');
@@ -815,7 +829,19 @@
       icon.setAttribute('aria-hidden', 'true');
       const text = document.createElement('span');
       text.textContent = message;
-      toastBody.replaceChildren(icon, text);
+      const parts = [icon, text];
+      if (action) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-link btn-sm p-0 ms-2 toast-action';
+        btn.textContent = action.label;
+        btn.addEventListener('click', () => {
+          action.onClick();
+          if (toastInstance) toastInstance.hide();
+        }, { once: true });
+        parts.push(btn);
+      }
+      toastBody.replaceChildren(...parts);
     }
 
     if (toastInstance) {

@@ -36,6 +36,15 @@
     return ['|', '│', '║', '┆', '┊', '╎'].includes(char) || BORDER_JUNCTIONS.includes(char);
   }
 
+  // Corner families: a box's four corners come from the same family, so an
+  // ascii '.' box closes on ' or ` (not on a '+' rim inside it)
+  const CORNER_FAMILY = {
+    '+': 'plus', '.': 'ascii-round', '\'': 'ascii-round', '`': 'ascii-round',
+    '┌': 'square', '┐': 'square', '└': 'square', '┘': 'square',
+    '╭': 'round', '╮': 'round', '╰': 'round', '╯': 'round',
+    '╔': 'double', '╗': 'double', '╚': 'double', '╝': 'double'
+  };
+
   function isCorner(char, type) {
     if (type === 'tl') return ['+', '┌', '╭', '.', '╔'].includes(char);
     if (type === 'tr') return ['+', '┐', '╮', '.', '╗'].includes(char);
@@ -113,6 +122,67 @@
       return out.join('\n');
     }
 
+    // Check a guessed shape against the input by asking the renderer to draw
+    // that shape type at that position, so import always matches how shapes
+    // are actually drawn. Returns the outline cells and per-row text, or null.
+    const verifyRenderers = {};
+    function verifyShape(type, x, y, w, h) {
+      // The box may reach past the end of a line (trailing spaces are
+      // trimmed), so cells outside the text count as blank
+      if (!global.AsciiRenderer || w < 3 || h < 2 || x < -2 || y < 0 || x + w > W + 2 || y + h > H) return null;
+      for (let yy = y; yy < y + h; yy++) {
+        for (let xx = x; xx < x + w; xx++) if (visited[yy]?.[xx]) return null;
+      }
+      for (const mode of ['unicode', 'ascii', 'unicode-curved']) {
+        if (!verifyRenderers[mode]) {
+          verifyRenderers[mode] = new global.AsciiRenderer();
+          verifyRenderers[mode].setMode(mode);
+        }
+        const g = verifyRenderers[mode].renderToGrid(
+          { shapes: [{ id: 'probe', type, x, y, w, h, text: '' }], connectors: [], texts: [], notes: [] },
+          { minCol: x, minRow: y, maxCol: x + w - 1, maxRow: y + h - 1 }
+        );
+        const outline = [];
+        let match = 0;
+        for (let yy = y; yy < y + h; yy++) {
+          for (let xx = x; xx < x + w; xx++) {
+            if (g.getType(xx, yy) !== 'border') continue;
+            outline.push([xx, yy]);
+            const want = g.get(xx, yy);
+            const got = at(xx, yy);
+            // A connector attached to the outline turns it into a junction
+            if (got === want || (BORDER_JUNCTIONS.includes(got) && (isHBorder(want) || isVBorder(want)))) match++;
+          }
+        }
+        if (outline.length < 4 || match / outline.length < 0.85) continue;
+
+        // Text: everything inside the outline, plus letters that overwrote it
+        const inOutline = new Set(outline.map(([a, b]) => `${a},${b}`));
+        const rows = [];
+        for (let yy = y; yy < y + h; yy++) {
+          let row = '';
+          for (let xx = x; xx < x + w; xx++) {
+            const ch = at(xx, yy);
+            const isOutline = inOutline.has(`${xx},${yy}`);
+            row += !isOutline || (/[A-Za-z0-9]/.test(ch) && ch !== g.get(xx, yy)) ? ch : ' ';
+          }
+          rows.push(row);
+        }
+        return { outline, text: cleanLines(rows) };
+      }
+      return null;
+    }
+
+    function addVerifiedShape(type, x, y, w, h, result) {
+      const shape = newShape({ type, x, y, w, h, text: result.text });
+      shapes.push(shape);
+      for (let yy = y; yy < y + h; yy++) {
+        for (let xx = Math.max(0, x); xx < Math.min(W, x + w); xx++) visited[yy][xx] = true;
+      }
+      for (const [ox, oy] of result.outline) if (ox >= 0 && ox < W) owner[oy][ox] = shape;
+      return shape;
+    }
+
     // --- Rectangles, rounded boxes, containers and notes ---------------
     for (let r = 0; r < H; r++) {
       for (let c = 0; c < W; c++) {
@@ -121,7 +191,7 @@
 
         let found = false;
         for (let cEnd = c + 3; cEnd < W && !found; cEnd++) {
-          if (!isCorner(grid[r][cEnd], 'tr')) continue;
+          if (!isCorner(grid[r][cEnd], 'tr') || CORNER_FAMILY[grid[r][cEnd]] !== CORNER_FAMILY[ch]) continue;
 
           // Top border, allowing a container title like "┌┄[ VPC ]┄┄┐"
           let title = null;
@@ -141,10 +211,22 @@
 
           for (let rEnd = r + 2; rEnd < H; rEnd++) {
             if (!isCorner(grid[rEnd][c], 'bl') || !isCorner(grid[rEnd][cEnd], 'br')) continue;
+            if (CORNER_FAMILY[grid[rEnd][c]] !== CORNER_FAMILY[ch] || CORNER_FAMILY[grid[rEnd][cEnd]] !== CORNER_FAMILY[ch]) continue;
             let ok = true;
             for (let k = c + 1; k < cEnd && ok; k++) ok = isHBorder(grid[rEnd][k]);
             for (let k = r + 1; k < rEnd && ok; k++) ok = isVBorder(grid[k][c]) && isVBorder(grid[k][cEnd]);
             if (!ok) continue;
+
+            // In ascii a queue's slot dividers are '+' too, so the first '+'
+            // along the top may be a divider: prefer a wider box that
+            // verifies as a queue
+            if (ch === '+' && isHBorder(at(cEnd + 1, r))) {
+              let widest = cEnd;
+              for (let wide = cEnd + 2; wide < W && isHBorder(grid[r][wide]); wide++) {
+                if (grid[r][wide] === '+' && verifyShape('queue', c, r, wide - c + 1, rEnd - r + 1)) widest = wide;
+              }
+              cEnd = widest;
+            }
 
             const w = cEnd - c + 1;
             const h = rEnd - r + 1;
@@ -191,6 +273,11 @@
               shape.textAlign = 'left';
               shapes.push(shape);
               markBox(c, r, cEnd, rEnd, shape, false); // nested shapes stay importable
+            } else if (!fold && (shape = ['database', 'queue']
+              .map(type => ({ type, result: verifyShape(type, c, r, w, h) }))
+              .find(v => v.result))) {
+              // A box with a rim (database) or slot dividers (queue)
+              addVerifiedShape(shape.type, c, r, w, h, shape.result);
             } else {
               const rounded = ['╭', '.'].includes(ch);
               const double = ['╔', '═'].includes(ch);
@@ -335,6 +422,58 @@
       }
     }
 
+    // --- Hexagons: < … > with flat top and bottom runs -------------------
+    for (let cy = 0; cy < H; cy++) {
+      for (let x = 0; x < W; x++) {
+        if (grid[cy][x] !== '<' || visited[cy][x]) continue;
+        const xr = grid[cy].indexOf('>', x + 2);
+        if (xr < 0) continue;
+        let found = false;
+        for (let y = cy - 1; y >= 0 && y >= cy - 8 && !found; y--) {
+          for (const h of [2 * (cy - y) + 1, 2 * (cy - y) + 2]) {
+            const result = verifyShape('hexagon', x, y, xr - x + 1, h);
+            if (result) { addVerifiedShape('hexagon', x, y, xr - x + 1, h, result); found = true; break; }
+          }
+        }
+      }
+    }
+
+    // --- Triangles: ^ apex over a flat base -------------------------------
+    for (let y = 0; y < H; y++) {
+      for (let c = 0; c < W; c++) {
+        if (grid[y][c] !== '^' || visited[y][c]) continue;
+        for (let yb = y + 2; yb < H && yb <= y + 30; yb++) {
+          if (!isHBorder(grid[yb][c])) continue;
+          let x = c, e = c;
+          while (x - 1 >= 0 && isHBorder(grid[yb][x - 1])) x--;
+          while (e + 1 < W && isHBorder(grid[yb][e + 1])) e++;
+          const result = verifyShape('triangle', x, y, e - x + 1, yb - y + 1);
+          if (result) { addVerifiedShape('triangle', x, y, e - x + 1, yb - y + 1, result); break; }
+        }
+      }
+    }
+
+    // --- Clouds: ( … ) sides under scalloped tops ------------------------
+    for (let my = 1; my < H; my++) {
+      for (let x = 0; x < W; x++) {
+        if (grid[my][x] !== '(' || visited[my][x]) continue;
+        const xr = grid[my].indexOf(')', x + 3);
+        if (xr < 0) continue;
+        let found = false;
+        for (let y = my - 1; y >= 0 && y >= my - 3 && !found; y--) {
+          for (let yb = my + 1; yb < H && yb <= my + 12 && !found; yb++) {
+            // The sides sit on the bounding box, or one column inside it
+            for (const inset of [0, 1]) {
+              const cx = x - inset;
+              const cw = xr - x + 1 + 2 * inset;
+              const result = verifyShape('cloud', cx, y, cw, yb - y + 1);
+              if (result) { addVerifiedShape('cloud', cx, y, cw, yb - y + 1, result); found = true; break; }
+            }
+          }
+        }
+      }
+    }
+
     // --- Connectors -----------------------------------------------------
     const isLineCell = (x, y) => !visited[y]?.[x] && (LINE_GLYPHS[at(x, y)] !== undefined || ARROW_GLYPHS[at(x, y)] !== undefined);
     const glyphDirs = (x, y) => {
@@ -402,8 +541,12 @@
       const [dx, dy] = STEP[d];
       const first = owner[y + dy]?.[x + dx];
       if (first) return first;
-      if (at(x + dx, y + dy) === ' ') return owner[y + 2 * dy]?.[x + 2 * dx] || null;
-      return null;
+      if (at(x + dx, y + dy) === ' ' && owner[y + 2 * dy]?.[x + 2 * dx]) return owner[y + 2 * dy][x + 2 * dx];
+      // Anchors of sloped shapes (triangles) sit on the bounding box, which
+      // can be blank space beside the outline
+      const nx = x + dx, ny = y + dy;
+      return [...shapes, ...notes].find(s => s.type !== 'container' &&
+        nx >= s.x && nx < s.x + s.w && ny >= s.y && ny < s.y + s.h) || null;
     }
 
     const ANCHOR_FOR_ENTRY = { [R]: 'left', [L]: 'right', [D]: 'top', [U]: 'bottom' };
@@ -432,44 +575,119 @@
         cells.push([x, y]);
         lineCellsUsed.add(`${x},${y}`);
 
-        // Keep going straight where possible (through crossings and along
-        // the trunk of a T); turn at corners; stop on the stem of a T.
-        const options = linksOf(x, y).filter(o => o !== OPPOSITE[d]);
+        // Stop at T-junctions (pieces are joined up afterwards), go straight
+        // through crossings, turn at corners.
+        const links = linksOf(x, y);
+        if (links.length === 3) break;
+        const options = links.filter(o => o !== OPPOSITE[d]);
         if (options.includes(d)) continue;
         if (options.length === 1) { d = options[0]; corners.push({ x, y }); continue; }
-        if (options.length === 0 && !ARROW_GLYPHS[at(x, y)]) continue; // may still bridge a label
+        if (options.length === 0 && !ARROW_GLYPHS[at(x, y)]) {
+          // Nothing linked onwards, but the line may carry on through a label
+          // just past a corner: turn towards the one direction that bridges
+          // a label (an ascii '+' connects every way, so test each)
+          const onward = ALL_DIRS.filter(o => o !== OPPOSITE[d] && (glyphDirs(x, y) & o) && bridgeLabel(x, y, o));
+          if (onward.length === 1 && onward[0] !== d) { d = onward[0]; corners.push({ x, y }); }
+          continue;
+        }
         break;
       }
 
       return { cells, corners, labels, startOpen: OPPOSITE[firstDir], endOpen: d, endShape };
     }
 
-    function addConnector(path) {
-      if (path.cells.length < 2 && !path.labels.length) return;
-      const [sx, sy] = path.cells[0];
-      const [ex, ey] = path.cells[path.cells.length - 1];
-      const startArrow = ARROW_GLYPHS[at(sx, sy)];
-      const endArrow = ARROW_GLYPHS[at(ex, ey)];
+    // A traced piece of line between two ends. An end is a shape it touches,
+    // a T-junction where it meets other pieces, or a free point.
+    function makePiece(path) {
+      const endOf = (cell, open, forcedShape) => {
+        const [x, y] = cell;
+        const arrow = ARROW_GLYPHS[at(x, y)];
+        return {
+          point: { x, y },
+          shape: forcedShape || shapeBeyond(x, y, open),
+          anchor: ANCHOR_FOR_ENTRY[open],
+          arrow: arrow && (arrow[0] & OPPOSITE[open]) ? arrow[1] : 'none',
+          junction: linksOf(x, y).length === 3
+        };
+      };
+      return {
+        ends: [
+          endOf(path.cells[0], path.startOpen, null),
+          endOf(path.cells[path.cells.length - 1], path.endOpen, path.endShape)
+        ],
+        corners: path.corners,
+        cells: path.cells,
+        labels: path.labels.filter(Boolean)
+      };
+    }
 
-      let from = {
-        point: { x: sx, y: sy },
-        shape: shapeBeyond(sx, sy, path.startOpen),
-        anchor: ANCHOR_FOR_ENTRY[path.startOpen],
-        arrow: startArrow && (startArrow[0] & OPPOSITE[path.startOpen]) ? startArrow[1] : 'none'
-      };
-      let to = {
-        point: { x: ex, y: ey },
-        shape: path.endShape || shapeBeyond(ex, ey, path.endOpen),
-        anchor: ANCHOR_FOR_ENTRY[path.endOpen],
-        arrow: endArrow && (endArrow[0] & OPPOSITE[path.endOpen]) ? endArrow[1] : 'none'
-      };
-      let corners = path.corners;
+    // Join pieces that meet at a T-junction: pieces whose far end carries an
+    // arrowhead are targets, the others sources, and every source-target
+    // pair becomes one connector (a fan-out or fan-in).
+    function joinAtJunctions(pieces) {
+      for (let round = 0; round < 20; round++) {
+        const byJunction = new Map();
+        pieces.forEach((piece, i) => piece.ends.forEach((end, e) => {
+          if (!end.junction) return;
+          const key = `${end.point.x},${end.point.y}`;
+          if (!byJunction.has(key)) byJunction.set(key, []);
+          byJunction.get(key).push({ piece, i, e });
+        }));
+
+        let joined = false;
+        for (const entries of byJunction.values()) {
+          const far = (en) => en.piece.ends[1 - en.e];
+          const targets = entries.filter(en => far(en).arrow !== 'none');
+          const sources = entries.filter(en => far(en).arrow === 'none');
+          if (!targets.length || !sources.length) continue;
+
+          const created = [];
+          for (const s of sources) {
+            for (const t of targets) {
+              // Corners ordered source end -> junction -> target end
+              const sCorners = s.e === 1 ? s.piece.corners : s.piece.corners.slice().reverse();
+              const tCorners = t.e === 0 ? t.piece.corners : t.piece.corners.slice().reverse();
+              const j = far(s) === s.piece.ends[0] ? s.piece.ends[1].point : s.piece.ends[0].point;
+              const sCells = s.e === 1 ? s.piece.cells : s.piece.cells.slice().reverse();
+              const tCells = t.e === 0 ? t.piece.cells : t.piece.cells.slice().reverse();
+              const before = sCells[sCells.length - 2];
+              const after = tCells[1];
+              const turns = before && after && (before[0] === j.x) !== (after[0] === j.x);
+              const labels = sources.length === 1 && targets.length > 1
+                ? (t.piece.labels.length ? t.piece.labels : s.piece.labels)
+                : targets.length === 1 && sources.length > 1
+                  ? (s.piece.labels.length ? s.piece.labels : t.piece.labels)
+                  : [...s.piece.labels, ...t.piece.labels];
+              created.push({
+                ends: [far(s), far(t)],
+                corners: [...sCorners, ...(turns ? [j] : []), ...tCorners],
+                cells: [...sCells, ...tCells],
+                labels
+              });
+            }
+          }
+          const used = new Set(entries.map(en => en.piece));
+          pieces = pieces.filter(p => !used.has(p)).concat(created);
+          joined = true;
+          break;
+        }
+        if (!joined) break;
+      }
+      return pieces;
+    }
+
+    const connectorCells = new Map(); // connector -> traced cells
+
+    function addConnector(piece) {
+      let [from, to] = piece.ends;
+      let corners = piece.corners;
       // Point the connector at its arrowhead
       if (from.arrow !== 'none' && to.arrow === 'none') {
         [from, to] = [to, from];
         corners = corners.slice().reverse();
       }
-      if (!from.shape && !to.shape && path.cells.length < 3) return; // stray mark
+      if (piece.cells.length < 2 && !piece.labels.length) return;
+      if (!from.shape && !to.shape && piece.cells.length < 3) return; // stray mark
 
       const conn = {
         id: `conn_${connectors.length + 1}`,
@@ -485,13 +703,15 @@
         arrowStart: from.arrow,
         arrowEnd: to.arrow
       };
-      const label = path.labels.filter(Boolean).join(' ');
+      const label = piece.labels.join(' ');
       if (label) conn.label = label;
       connectors.push(conn);
+      connectorCells.set(conn, piece.cells);
     }
 
     // Start from line ends (degree 0 or 1), then pick up anything left over
-    // (segments between junctions, loops) from cells with unused links.
+    // (pieces between junctions, loops) from cells with unused links.
+    let pieces = [];
     for (let pass = 0; pass < 2; pass++) {
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
@@ -499,6 +719,12 @@
           const links = linksOf(x, y);
           if (pass === 0) {
             if (links.length > 1 || lineCellsUsed.has(`${x},${y}`)) continue;
+            // Not a real end if the line carries on through a label here
+            // (e.g. a corner with a label just past it) and no shape is beside it
+            if (links.length === 1) {
+              const open = ALL_DIRS.filter(o => o !== links[0] && (glyphDirs(x, y) & o));
+              if (open.some(o => bridgeLabel(x, y, o)) && !open.some(o => shapeBeyond(x, y, o))) continue;
+            }
             let dir = links[0];
             if (dir === undefined) {
               // A lone stub: head away from the shape it touches, towards a label
@@ -507,14 +733,32 @@
             } else if (usedEdges.has(edgeKey(x, y, dir))) {
               continue;
             }
-            addConnector(trace(x, y, dir));
+            pieces.push(makePiece(trace(x, y, dir)));
           } else {
             for (const d of links) {
-              if (!usedEdges.has(edgeKey(x, y, d))) addConnector(trace(x, y, d));
+              if (!usedEdges.has(edgeKey(x, y, d))) pieces.push(makePiece(trace(x, y, d)));
             }
           }
         }
       }
+    }
+    joinAtJunctions(pieces).forEach(addConnector);
+
+    // A label placed beside its line (above/below a horizontal run, left or
+    // right of a vertical one) belongs to the connector it touches
+    function connectorBeside(x0, x1, y) {
+      for (const conn of connectors) {
+        if (conn.label) continue;
+        for (const [cx, cy] of connectorCells.get(conn)) {
+          const g = LINE_GLYPHS[at(cx, cy)];
+          if (g === undefined) continue;
+          const horizontal = (g & (L | R)) && !(g & (U | D));
+          const vertical = (g & (U | D)) && !(g & (L | R));
+          if (horizontal && Math.abs(cy - y) === 1 && cx >= x0 && cx <= x1) return conn;
+          if (vertical && cy === y && (cx === x0 - 2 || cx === x0 - 1 || cx === x1 + 1 || cx === x1 + 2)) return conn;
+        }
+      }
+      return null;
     }
 
     // --- Free text --------------------------------------------------------
@@ -526,7 +770,10 @@
         let e = x;
         while (e + 1 < W && (free(e + 1) || (grid[y][e + 1] === ' ' && e + 2 < W && free(e + 2)))) e++;
         const words = grid[y].slice(x, e + 1).join('');
-        if (/[A-Za-z0-9]/.test(words)) {
+        const owner = /[A-Za-z0-9]/.test(words) ? connectorBeside(x, e, y) : null;
+        if (owner) {
+          owner.label = words.trim();
+        } else if (/[A-Za-z0-9]/.test(words)) {
           texts.push({
             id: `text_${texts.length + 1}`,
             type: 'text',

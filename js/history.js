@@ -27,7 +27,7 @@
       const state = {
         canUndo: this.canUndo(),
         canRedo: this.canRedo(),
-        undoCount: this.undoStack.length,
+        undoCount: Math.max(0, this.undoStack.length - 1),
         redoCount: this.redoStack.length
       };
       for (const cb of this.listeners) {
@@ -69,37 +69,45 @@
     }
 
     /**
-     * Undo action: returns previous state, pushes current to redo
+     * The top of the undo stack is always the current state: the canvas
+     * records a snapshot after every change. Undo moves that snapshot to the
+     * redo stack and returns the one below it.
+     *
+     * currentState is the live diagram; if it has unrecorded changes, it is
+     * kept on the redo stack so Redo can bring it back.
      */
     undo(currentState) {
-      if (!this.canUndo()) return null;
+      const top = this.undoStack[this.undoStack.length - 1];
+      const unrecorded = currentState && top &&
+        JSON.stringify(currentState) !== JSON.stringify(top);
 
-      const previous = this.undoStack.pop();
-      if (currentState) {
+      if (unrecorded) {
+        // Go back to the last recorded state; Redo restores the live one
         this.redoStack.push(this.cloneState(currentState));
+      } else {
+        if (!this.canUndo()) return null;
+        this.redoStack.push(this.undoStack.pop());
       }
 
       this.notify();
-      return previous;
+      return this.cloneState(this.undoStack[this.undoStack.length - 1]);
     }
 
     /**
-     * Redo action: returns next state, pushes current to undo
+     * Redo action: returns the next state and makes it the current one
      */
-    redo(currentState) {
+    redo() {
       if (!this.canRedo()) return null;
 
       const next = this.redoStack.pop();
-      if (currentState) {
-        this.undoStack.push(this.cloneState(currentState));
-      }
+      this.undoStack.push(next);
 
       this.notify();
-      return next;
+      return this.cloneState(next);
     }
 
     canUndo() {
-      return this.undoStack.length > 0;
+      return this.undoStack.length > 1;
     }
 
     canRedo() {

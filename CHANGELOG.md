@@ -6,6 +6,17 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Connector labels no longer hide arrowheads, junctions or each other: they are placed after
+  all connectors are drawn, on the line where they fit and beside it where they don't
+- ASCII import recognises every shape type (adding hexagons, triangles, databases, clouds and
+  queues), joins connectors that split or merge at a junction, and attaches labels placed
+  beside a line; all three templates now re-import to an identical diagram
+- Fix undo: one Undo now reverts one change (the first Undo after a change did nothing), and
+  Undo is disabled when there is nothing to undo
+- New and Templates no longer ask for confirmation in a browser dialog: replacing the diagram is
+  one undo step, and the toast offers an Undo button
+- Fit to view zooms out to the canvas minimum and, for diagrams still larger than the view,
+  shows them from the top-left instead of centring on what may be empty space
 - ASCII import now recognises diamonds, parallelograms, circles, notes and titled or dashed
   containers (keeping nested shapes), traces bent connectors as one connector through corners
   and crossings, keeps connector labels and arrowheads, and keeps other text as text items; all

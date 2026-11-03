@@ -476,10 +476,16 @@
         }
       }
 
-      // Pass 3: Draw connectors (with border junctions and arrowheads)
+      // Pass 3: Draw connectors (with border junctions and arrowheads), then
+      // their labels once every line is in place, so a label never hides
+      // another connector's arrowhead or junction
       if (diagram.connectors) {
+        const labels = [];
         for (const conn of diagram.connectors) {
-          this.renderConnector(grid, conn, shapeMap, chars);
+          this.renderConnector(grid, conn, shapeMap, chars, labels);
+        }
+        for (const { conn, points } of labels) {
+          this.renderConnectorLabel(grid, conn, points);
         }
       }
 
@@ -1117,7 +1123,7 @@
     /**
      * Render Orthogonal or Straight Connector with clean border junctions and customizable arrows
      */
-    renderConnector(grid, conn, shapeMap, chars) {
+    renderConnector(grid, conn, shapeMap, chars, pendingLabels = null) {
       const routeInfo = this.resolveConnectorRouteInfo(conn, shapeMap);
       if (!routeInfo || !routeInfo.points || routeInfo.points.length < 2) return;
 
@@ -1202,9 +1208,11 @@
         grid.set(firstPt.x, firstPt.y, arrowChar, 'arrow', id);
       }
 
-      // 5. Render connector label if present
+      // 5. Render connector label if present (deferred when the caller
+      // collects labels to place after all connectors are drawn)
       if (conn.label && points.length >= 2) {
-        this.renderConnectorLabel(grid, conn, points);
+        if (pendingLabels) pendingLabels.push({ conn, points });
+        else this.renderConnectorLabel(grid, conn, points);
       }
     }
 
@@ -1679,28 +1687,118 @@
      * Render connector label in the center of the longest segment
      */
     renderConnectorLabel(grid, conn, points) {
-      let longestIndex = 0;
-      let maxDist = -1;
+      const text = String(conn.label).trim();
+      if (!text) return;
+      const label = ` ${text} `;
+      const len = label.length;
+      const id = conn.id;
 
+      const owned = (x, y) => grid.isInBounds(x, y) &&
+        grid.cellOwners[y - grid.minRow][x - grid.minCol] === id;
+      // A straight piece of this connector's own line (safe to write over)
+      const ownLine = (x, y) => owned(x, y) && grid.getType(x, y) === 'line';
+      // Still part of this connector (line, corner, its arrowhead or its
+      // border junction): keeps the line visibly attached on both sides
+      const ownPath = (x, y) => owned(x, y) &&
+        ['line', 'junction', 'arrow', 'border'].includes(grid.getType(x, y));
+      const free = (x, y) => grid.isInBounds(x, y) && grid.getType(x, y) === null && grid.get(x, y) === ' ';
+
+      // Segments, longest first (stable, so ties keep path order)
+      const segments = [];
       for (let i = 0; i < points.length - 1; i++) {
-        const dist = Math.abs(points[i + 1].x - points[i].x) + Math.abs(points[i + 1].y - points[i].y);
-        if (dist > maxDist) {
-          maxDist = dist;
-          longestIndex = i;
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        if (p1.x !== p2.x && p1.y !== p2.y) continue;
+        segments.push({ p1, p2, length: Math.abs(p2.x - p1.x) + Math.abs(p2.y - p1.y) });
+      }
+      segments.sort((a, b) => b.length - a.length);
+
+      // Offsets 0, -1, +1, -2, +2, ... within [-max, max]
+      const offsets = (max) => {
+        const out = [0];
+        for (let k = 1; k <= max; k++) out.push(-k, k);
+        return out;
+      };
+
+      const tryPlace = (cellsFor) => {
+        for (const cells of cellsFor) {
+          if (cells) {
+            for (let i = 0; i < len; i++) grid.set(cells.x + i, cells.y, label[i], 'text', id);
+            return true;
+          }
         }
-      }
+        return false;
+      };
 
-      const p1 = points[longestIndex];
-      const p2 = points[longestIndex + 1];
-      const midX = Math.round((p1.x + p2.x) / 2);
-      const midY = Math.round((p1.y + p2.y) / 2);
+      // 1. On the line, sliding along each segment
+      const onLine = function* (seg) {
+        const { p1, p2 } = seg;
+        if (p1.y === p2.y) {
+          const y = p1.y;
+          const a = Math.min(p1.x, p2.x);
+          const b = Math.max(p1.x, p2.x);
+          const mid = Math.round((a + b) / 2);
+          for (const off of offsets(b - a)) {
+            const x = mid - Math.floor(len / 2) + off;
+            let ok = ownPath(x - 1, y) && ownPath(x + len, y);
+            for (let i = 0; ok && i < len; i++) ok = ownLine(x + i, y);
+            yield ok ? { x, y } : null;
+          }
+        } else {
+          const x = p1.x;
+          const a = Math.min(p1.y, p2.y);
+          const b = Math.max(p1.y, p2.y);
+          const mid = Math.round((a + b) / 2);
+          for (const off of offsets(b - a)) {
+            const y = mid + off;
+            const sx = x - Math.floor(len / 2);
+            let ok = ownLine(x, y) && ownPath(x, y - 1) && ownPath(x, y + 1);
+            for (let i = 0; ok && i < len; i++) ok = sx + i === x || free(sx + i, y);
+            yield ok ? { x: sx, y } : null;
+          }
+        }
+      };
 
-      const label = ` ${conn.label.trim()} `;
-      const startX = midX - Math.floor(label.length / 2);
+      // 2. Beside the line: above/below a horizontal segment, right/left of
+      // a vertical one
+      const besideLine = function* (seg) {
+        const { p1, p2 } = seg;
+        if (p1.y === p2.y) {
+          const a = Math.min(p1.x, p2.x);
+          const b = Math.max(p1.x, p2.x);
+          const mid = Math.round((a + b) / 2);
+          for (const y of [p1.y - 1, p1.y + 1]) {
+            for (const off of offsets(Math.max(0, b - a - len))) {
+              const x = mid - Math.floor(len / 2) + off;
+              let ok = true;
+              for (let i = 0; ok && i < len; i++) ok = free(x + i, y);
+              yield ok ? { x, y } : null;
+            }
+          }
+        } else {
+          const a = Math.min(p1.y, p2.y);
+          const b = Math.max(p1.y, p2.y);
+          const mid = Math.round((a + b) / 2);
+          for (const sx of [p1.x + 1, p1.x - len]) {
+            for (const off of offsets(Math.floor((b - a) / 2))) {
+              const y = mid + off;
+              let ok = true;
+              for (let i = 0; ok && i < len; i++) ok = free(sx + i, y);
+              yield ok ? { x: sx, y } : null;
+            }
+          }
+        }
+      };
 
-      for (let i = 0; i < label.length; i++) {
-        grid.set(startX + i, midY, label[i], 'text', conn.id);
-      }
+      for (const seg of segments) if (tryPlace(onLine(seg))) return;
+      for (const seg of segments) if (tryPlace(besideLine(seg))) return;
+
+      // 3. Nowhere clean: the middle of the longest segment, as before
+      if (!segments.length) return;
+      const { p1, p2 } = segments[0];
+      const x = Math.round((p1.x + p2.x) / 2) - Math.floor(len / 2);
+      const y = Math.round((p1.y + p2.y) / 2);
+      for (let i = 0; i < len; i++) grid.set(x + i, y, label[i], 'text', id);
     }
 
     /**
