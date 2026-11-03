@@ -1231,9 +1231,9 @@
           pStart = { ...pBorder };
           const canJunc = (shapeFrom.type === 'rectangle' || shapeFrom.type === 'rounded-rectangle' || shapeFrom.type === 'note');
           if (chosenFrom === 'right') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_right }; pStart.x += 1; }
-          else if (chosenFrom === 'bottom') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_up }; pStart.y += 1; }
+          else if (chosenFrom === 'bottom') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_down }; pStart.y += 1; }
           else if (chosenFrom === 'left') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_left }; pStart.x -= 1; }
-          else if (chosenFrom === 'top') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_down }; pStart.y -= 1; }
+          else if (chosenFrom === 'top') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_up }; pStart.y -= 1; }
         } else if (conn.fromPoint) {
           pStart = { ...conn.fromPoint };
         } else {
@@ -1290,9 +1290,9 @@
         let sourceJunction = null;
         const canJunc = (shapeFrom.type === 'rectangle' || shapeFrom.type === 'rounded-rectangle' || shapeFrom.type === 'note');
         if (chosenFrom === 'right') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_right }; pStart.x += 1; }
-        else if (chosenFrom === 'bottom') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_up }; pStart.y += 1; }
+        else if (chosenFrom === 'bottom') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_down }; pStart.y += 1; }
         else if (chosenFrom === 'left') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_left }; pStart.x -= 1; }
-        else if (chosenFrom === 'top') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_down }; pStart.y -= 1; }
+        else if (chosenFrom === 'top') { if (canJunc) sourceJunction = { x: pBorder.x, y: pBorder.y, char: (ch) => ch.t_up }; pStart.y -= 1; }
 
         const points = this.computeOrthogonalPath(pStart, conn.toPoint);
         return { points, sourceJunction };
@@ -1418,7 +1418,7 @@
         pStart.x += 1; // start outside border
       } else if (chosenFrom === 'bottom') {
         if (canHaveJunction) {
-          sourceJunction = { x: pFromBorder.x, y: pFromBorder.y, char: (ch) => ch.t_up };
+          sourceJunction = { x: pFromBorder.x, y: pFromBorder.y, char: (ch) => ch.t_down };
         }
         pStart.y += 1;
       } else if (chosenFrom === 'left') {
@@ -1428,7 +1428,7 @@
         pStart.x -= 1;
       } else if (chosenFrom === 'top') {
         if (canHaveJunction) {
-          sourceJunction = { x: pFromBorder.x, y: pFromBorder.y, char: (ch) => ch.t_down };
+          sourceJunction = { x: pFromBorder.x, y: pFromBorder.y, char: (ch) => ch.t_up };
         }
         pStart.y -= 1;
       }

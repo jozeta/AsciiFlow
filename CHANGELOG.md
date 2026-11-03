@@ -6,6 +6,8 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 
 ## Unreleased
 
+- Fix the Unicode junction where a connector leaves the top or bottom of a box: it was drawn
+  upside down (`┴` on a bottom border, `┬` on a top border)
 - Fix ASCII import of Unicode diagrams: boxes with a connector attached (a `├ ┤ ┬ ┴` junction
   in the border) and boxes with dashed Unicode borders were dropped; Unicode output now
   re-imports the same as ASCII output

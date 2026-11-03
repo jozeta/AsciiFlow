@@ -36,6 +36,23 @@ test('two connected boxes render as expected in ascii mode', () => {
   ].join('\n'));
 });
 
+// The junction where a connector leaves a box has its stem on the side the
+// connector goes: ┬ on a bottom border, ┴ on a top border (these were swapped).
+test('connector junctions point the way the connector leaves', () => {
+  const box = (id, y) => ({ id, type: 'rectangle', x: 2, y, w: 12, h: 5, text: id });
+  const down = {
+    shapes: [box('A', 2), box('B', 12)],
+    connectors: [{ id: 'c', fromShapeId: 'A', fromAnchor: 'bottom', toShapeId: 'B', toAnchor: 'top' }]
+  };
+  const up = {
+    shapes: [box('A', 2), box('B', 12)],
+    connectors: [{ id: 'c', fromShapeId: 'B', fromAnchor: 'top', toShapeId: 'A', toAnchor: 'bottom' }]
+  };
+  assert.match(render(down, 'unicode'), /└────┬─────┘/);
+  assert.match(render(up, 'unicode'), /┌────┴─────┐/);
+  assert.match(render(down, 'ascii'), /\+----\+-----\+/);
+});
+
 for (const key of Object.keys(SAMPLE_TEMPLATES)) {
   test(`template "${key}" renders in both modes`, () => {
     const d = AsciiStorage.getSample(key);
