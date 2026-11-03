@@ -2,9 +2,15 @@
 
 All notable changes to AsciiFlow are listed here, newest first.
 
-The project has no tagged releases yet, so changes are grouped by date. Entries before November 2026 were reconstructed from the commit history.
+Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by date; entries before November 2026 were reconstructed from the commit history.
 
 ## Unreleased
+
+Nothing yet.
+
+## 1.0.0 - 2026-11-03
+
+First tagged release.
 
 - Mermaid: import every flowchart node shape, edge style and end (`o`, `x`), both label forms,
   chains and `&` groups, `BT`/`RL`, subgraphs (as containers, nested too) and ignore styling
