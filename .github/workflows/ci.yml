@@ -20,4 +20,4 @@ jobs:
       - name: Syntax-check JavaScript
         run: for f in $(git ls-files 'js/*.js' 'tests/*.js'); do node --check "$f" || exit 1; done
       - name: Unit tests
-        run: node --test tests/
+        run: node --test tests/*.test.js

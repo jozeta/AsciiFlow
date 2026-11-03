@@ -62,7 +62,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 ├── vendor/             # Self-hosted Bootstrap 5.3.3 and Bootstrap Icons 1.11.3 (MIT)
 ├── favicon.svg
 ├── .github/workflows/  # CI: syntax check and tests on every push and pull request
-├── tests/              # Node test suite (node --test tests/)
+├── tests/              # Node test suite (node --test tests/*.test.js)
 └── docs/screenshots/   # README images
 ```
 
@@ -82,7 +82,7 @@ browser scripts in a `vm` sandbox and covers rendering in both modes, ASCII/Merm
 diagram validation:
 
 ```sh
-node --test tests/
+node --test tests/*.test.js
 ```
 
 GitHub Actions runs the same tests on every push and pull request.

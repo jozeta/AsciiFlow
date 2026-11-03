@@ -18,7 +18,7 @@ python3 -m http.server 8000      # then open http://localhost:8000/
 Opening `index.html` directly also works.
 
 ```sh
-node --test tests/               # Node 18+, no dependencies
+node --test tests/*.test.js               # Node 18+, no dependencies
 ```
 
 The tests load the browser scripts into a `vm` context (`tests/helpers.js`) and cover the

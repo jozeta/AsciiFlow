@@ -28,7 +28,7 @@ The project has no tagged releases yet, so changes are grouped by date. Entries 
 - Validate diagrams from share links, imported or dropped JSON and localStorage: unknown modes,
   oversized coordinates/sizes, huge lists and wrongly typed values are clamped or dropped; valid
   diagrams load unchanged
-- Add a dependency-free Node test suite (`node --test tests/`) for the renderer, the importers
+- Add a dependency-free Node test suite (`node --test tests/*.test.js`) for the renderer, the importers
   and diagram validation
 - Move the README screenshot to `docs/screenshots/editor.png` with descriptive alt text; document
   the file layout, how to run and test, and the security model
