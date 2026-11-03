@@ -51,6 +51,11 @@ changes in the browser (draw, connect, export, re-import).
   it covers. Exported text must import back to the same shapes, edges and labels (tested).
 - **Theme:** `theme.js` sets both `data-theme` (app tokens in `css/app.css`) and `data-bs-theme`
   (Bootstrap's own colours); keep new UI readable in both, the axe test checks contrast.
+- **Keyboard drawing** (`handleKeyboardDrawing` in `js/canvas.js`): Tab/Shift+Tab select shapes
+  in reading order while the canvas has focus and let focus leave after the last one (never trap
+  Tab); a shape tool + Enter adds a connected shape; Enter/F2 edit text; K, Tab, Enter connects.
+  Status goes to the `#canvasAnnouncer` live region via `announce()`. Shortcuts are ignored while
+  typing in inputs or with a dialog open; keep it that way for new shortcuts.
 - **Undo history:** the canvas records a snapshot after every change, so the top of the undo
   stack is the current state and `undo()` returns the entry below it. `loadDiagram(data,
   { undoable: true })` replaces the diagram as one undo step (New, Templates); without it,

@@ -359,7 +359,9 @@
         </div>
 
         <!-- Main HTML5 Canvas -->
-        <canvas id="editorCanvas" role="img" aria-label="Diagram editor canvas. The same diagram is available as text in the ASCII preview panel; keyboard shortcuts are listed under Help."></canvas>
+        <canvas id="editorCanvas" tabindex="0" role="application" aria-roledescription="diagram editor"
+          aria-label="Diagram editor. Tab moves between shapes; a shape key such as R then Enter adds a shape; Enter edits text; K connects. The diagram is also in the ASCII preview as text; all shortcuts are under Help."></canvas>
+        <div id="canvasAnnouncer" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
 
         <!-- In-place text editor for double click -->
         <textarea id="canvasTextEditor" spellcheck="false" placeholder="Enter shape text..."></textarea>
@@ -517,6 +519,23 @@
               <div class="shortcut-row"><span>Note Box</span><span class="shortcut-key">N</span></div>
             </div>
           </div>
+
+          <h6 class="fw-bold mt-4 mb-3 text-primary">Drawing Without a Mouse</h6>
+          <div class="row g-4">
+            <div class="col-md-6">
+              <div class="shortcut-row"><span>Focus the canvas</span><span class="shortcut-key">Tab</span></div>
+              <div class="shortcut-row"><span>Next / previous shape</span><span class="shortcut-key">Tab / Shift + Tab</span></div>
+              <div class="shortcut-row"><span>Add shape (to the right)</span><span class="shortcut-key">Shape key, Enter</span></div>
+              <div class="shortcut-row"><span>Add shape below</span><span class="shortcut-key">Shape key, Shift + Enter</span></div>
+            </div>
+            <div class="col-md-6">
+              <div class="shortcut-row"><span>Edit selected shape's text</span><span class="shortcut-key">Enter / F2</span></div>
+              <div class="shortcut-row"><span>Finish / cancel text</span><span class="shortcut-key">Ctrl + Enter / Esc</span></div>
+              <div class="shortcut-row"><span>Connect selected shape</span><span class="shortcut-key">K, Tab to target, Enter</span></div>
+              <div class="shortcut-row"><span>Cancel</span><span class="shortcut-key">Esc</span></div>
+            </div>
+          </div>
+          <p class="small mt-2 mb-0">A new shape is connected from the selected one, so a flowchart can be typed step by step. Screen readers announce each selection; the ASCII preview holds the whole diagram as text.</p>
 
           <div class="alert alert-light border mt-4 mb-0 small">
             <strong>Pro Tip:</strong> Click and drag from any blue anchor point on a shape to automatically route an orthogonal connector to another shape.

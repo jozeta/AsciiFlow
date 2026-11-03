@@ -6,6 +6,11 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
+- Draw without a mouse: Tab between shapes, add connected shapes with a shape key and Enter, edit
+  text with Enter or F2, connect shapes with K, Tab, Enter; screen readers announce each step and
+  Tab never gets trapped in the canvas. The new keys are listed under Help
+- Fix canvas shortcuts firing while typing in a dialog (Backspace in the import text could delete
+  the selected shapes behind it)
 - Detours no longer run along other connectors' lines: a detour that overlaps another connector
   is routed again around the existing lines (overlapping cells in the sample layouts: 113 -> 8);
   routes stay independent of connector order and ids

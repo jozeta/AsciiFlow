@@ -61,3 +61,78 @@ test('toggle buttons announce their state and the preview is reachable by keyboa
   await expect(preview).toBeFocused();
   await expect(preview).toContainText('Login Request');
 });
+
+test('a flowchart can be drawn with the keyboard alone', async ({ page }) => {
+  await page.goto('index.html');
+  await page.locator('#btnNew').click();
+  await expect(page.locator('body')).toContainText('0 objects');
+
+  // Tab to the canvas, add a box and type its label
+  await page.locator('#editorCanvas').focus();
+  await page.keyboard.press('r');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#canvasTextEditor')).toBeVisible();
+  await page.keyboard.type('Start');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(page.locator('#editorCanvas')).toBeFocused();
+
+  // A connected diamond to the right, then a box below it
+  await page.keyboard.press('d');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Ok?');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await page.keyboard.press('r');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('Done');
+  await page.keyboard.press('ControlOrMeta+Enter');
+
+  const preview = page.locator('#asciiPreviewCode');
+  await expect(preview).toContainText('Start');
+  await expect(preview).toContainText('Ok?');
+  await expect(preview).toContainText('Done');
+  await page.keyboard.press('Escape'); // clear the selection; the status bar then counts objects
+  await expect(page.locator('#statusSelection')).toHaveText('5 objects'); // 3 shapes, 2 connectors
+
+  // Tab through the shapes; the live region announces each one
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#canvasAnnouncer')).toContainText('rectangle "Start", 1 of 3');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#canvasAnnouncer')).toContainText('diamond "Ok?", 2 of 3');
+
+  // Connect "Start" straight to "Done": K, Tab to the target, Enter
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('k');
+  await expect(page.locator('#canvasAnnouncer')).toContainText('Connecting from rectangle "Start"');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#canvasAnnouncer')).toContainText('Connected rectangle "Start" to rectangle "Done"');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#statusSelection')).toHaveText('6 objects');
+
+  // Past the last shape, Tab leaves the canvas (no keyboard trap)
+  await expect(page.locator('#editorCanvas')).toBeFocused();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Tab');
+  await expect(page.locator('#editorCanvas')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#editorCanvas')).not.toBeFocused();
+});
+
+test('typing in a dialog does not trigger canvas shortcuts', async ({ page }) => {
+  await page.goto('index.html');
+  await page.locator('#editorCanvas').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('ControlOrMeta+a');
+  const before = await page.locator('#statusSelection').textContent();
+  await page.locator('[data-bs-toggle="dropdown"]', { hasText: 'Import' }).click();
+  await page.locator('[data-bs-target="#importAsciiModal"]').click();
+  await expect(page.locator('#importAsciiModal')).toBeVisible();
+  await page.waitForTimeout(400); // Bootstrap ignores Escape while the dialog fades in
+  await page.locator('#importAsciiText').fill('abc');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('r');
+  await expect(page.locator('#importAsciiText')).toHaveValue('abr');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#importAsciiModal')).toBeHidden();
+  await expect(page.locator('#statusSelection')).toHaveText(before); // nothing was deleted
+  await expect(page.locator('.tool-btn[data-tool="select"]')).toHaveAttribute('aria-pressed', 'true');
+});

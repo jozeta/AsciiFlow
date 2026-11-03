@@ -102,9 +102,13 @@ GitHub Actions runs both on every push and pull request.
 
 The interface passes automated WCAG 2.1 A/AA checks (axe-core) in the light and dark themes: text
 contrast, named controls, toggle buttons that announce their state (`aria-pressed`), and a
-keyboard-focusable ASCII preview that gives screen-reader users the whole diagram as text. Drawing
-itself is pointer-based; keyboard shortcuts (see Help) cover tools, selection, nudging, undo and
-clipboard.
+keyboard-focusable ASCII preview that gives screen-reader users the whole diagram as text.
+
+Diagrams can be drawn without a mouse: Tab into the canvas and between shapes, press a shape key
+(R, D, C, …) and Enter to add a shape connected to the selected one (Shift+Enter places it below),
+type its label and finish with Ctrl+Enter, and connect any two shapes with K, Tab to the target,
+Enter. Each step is announced to screen readers, and Tab leaves the canvas after the last shape.
+All keys are listed under Help.
 
 ## Security
 
@@ -207,7 +211,10 @@ The rendering engine operates on a 2D discrete character grid:
 | `Shift + Arrow Keys` | Nudge selected shape(s) by 5 character cells |
 | `Space + Drag` (or Middle Click) | Pan canvas |
 | `Ctrl / Cmd + Mouse Wheel` | Zoom in / out relative to cursor |
-| `Double Click` | Edit shape text in-place |
+| `Double Click` / `Enter` / `F2` | Edit shape text in-place (finish with `Ctrl + Enter`) |
+| `Tab` / `Shift + Tab` (canvas focused) | Select the next / previous shape |
+| Shape key, then `Enter` / `Shift + Enter` | Add that shape right of / below the selected one, connected to it |
+| `K`, `Tab` to a target, `Enter` | Connect the selected shape to another |
 | `Escape` | Cancel current tool / Deselect |
 | `V` | Select tool |
 | `H` | Hand / Pan tool |

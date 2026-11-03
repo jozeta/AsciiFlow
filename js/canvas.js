@@ -993,6 +993,13 @@
 
     onKeyDown(e) {
       if (this.editingShape) return; // Allow normal typing in textarea
+      // Typing in a dialog or form field (import text, settings) must not
+      // trigger canvas shortcuts such as Backspace deleting the selection
+      const target = e.target;
+      if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
+      if (document.querySelector('.modal.show')) return;
+
+      if (this.handleKeyboardDrawing(e)) return;
 
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
@@ -1050,6 +1057,8 @@
 
       // Escape: Return to select tool, deselect
       if (e.key === 'Escape') {
+        if (this.keyboardConnectFrom) this.announce('Connecting cancelled');
+        this.keyboardConnectFrom = null;
         this.setTool('select');
         this.selectedShapeIds.clear();
         this.selectedConnectorIds.clear();
@@ -1113,6 +1122,181 @@
           }
         }
       }
+    }
+
+    // ==========================================
+    // Keyboard Drawing
+    // ==========================================
+
+    /**
+     * Keys for drawing without a mouse. Returns true when the key was used.
+     * - Tab / Shift+Tab (canvas focused): select the next / previous shape in
+     *   reading order; past the last one focus moves on as usual (no trap)
+     * - Enter with a shape tool: add that shape next to the selected one
+     *   (to the right; Shift+Enter below) connected to it, or in the middle of
+     *   the view, then edit its text
+     * - Enter / F2 with one shape selected: edit its text
+     * - K with one shape selected: connect it; Tab to the target, Enter
+     */
+    handleKeyboardDrawing(e) {
+      const cmdOrCtrl = e.ctrlKey || e.metaKey;
+      const canvasFocused = document.activeElement === this.canvas;
+      const selected = () => (this.selectedShapeIds.size === 1 ? this.findShapeById([...this.selectedShapeIds][0]) : null);
+
+      if (e.key === 'Tab' && canvasFocused && !cmdOrCtrl && !e.altKey) {
+        if (this.selectNextShape(e.shiftKey ? -1 : 1)) {
+          e.preventDefault();
+          return true;
+        }
+        return false; // let focus leave the canvas
+      }
+
+      if ((e.key === 'Enter' || e.key === 'F2') && !cmdOrCtrl && !e.altKey) {
+        // Finish a keyboard connection
+        if (this.keyboardConnectFrom && e.key === 'Enter') {
+          const target = selected();
+          const source = this.findShapeById(this.keyboardConnectFrom);
+          if (target && source && target !== source) {
+            e.preventDefault();
+            this.addConnector(global.AsciiConnectors.createConnector(source.id, target.id, 'auto', 'auto'));
+            this.keyboardConnectFrom = null;
+            this.setTool('select');
+            this.syncToolButtons('select');
+            this.announce(`Connected ${this.describeShape(source)} to ${this.describeShape(target)}`);
+            return true;
+          }
+        }
+        const shapeTool = global.AsciiShapes.SHAPE_CONFIGS[this.currentTool] && !['line', 'arrow'].includes(this.currentTool);
+        if (shapeTool && e.key === 'Enter') {
+          e.preventDefault();
+          this.insertShapeFromKeyboard(this.currentTool, e.shiftKey);
+          return true;
+        }
+        const shape = selected();
+        if (shape && this.currentTool === 'select') {
+          e.preventDefault();
+          this.startTextEditing(shape, { returnFocus: true });
+          return true;
+        }
+      }
+
+      if (!cmdOrCtrl && !e.altKey && (e.key === 'k' || e.key === 'K' || e.key === 'w' || e.key === 'W')) {
+        const source = selected();
+        if (source) {
+          this.keyboardConnectFrom = source.id;
+          this.announce(`Connecting from ${this.describeShape(source)}. Press Tab to choose the target, Enter to connect, Escape to cancel.`);
+        }
+        return false; // the K shortcut still selects the connector tool
+      }
+      return false;
+    }
+
+    // Shapes and notes in reading order: top to bottom, then left to right
+    shapesInReadingOrder() {
+      return [...this.diagram.shapes, ...(this.diagram.notes || [])]
+        .slice()
+        .sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    }
+
+    /**
+     * Select the next (dir 1) or previous (-1) shape. Returns false when the
+     * end of the list is passed, so Tab can move focus out of the canvas.
+     */
+    selectNextShape(dir) {
+      const shapes = this.shapesInReadingOrder();
+      if (!shapes.length) return false;
+      const current = this.selectedShapeIds.size === 1 ? [...this.selectedShapeIds][0] : null;
+      const index = current ? shapes.findIndex(s => s.id === current) : -1;
+      const next = index === -1 ? (dir > 0 ? 0 : shapes.length - 1) : index + dir;
+      if (next < 0 || next >= shapes.length) {
+        this.selectedShapeIds.clear();
+        this.selectedConnectorIds.clear();
+        this.emitSelectionChange();
+        this.render();
+        return false;
+      }
+      const shape = shapes[next];
+      this.selectedShapeIds.clear();
+      this.selectedConnectorIds.clear();
+      this.selectedShapeIds.add(shape.id);
+      this.emitSelectionChange();
+      this.scrollShapeIntoView(shape);
+      this.render();
+      const where = `${next + 1} of ${shapes.length}`;
+      this.announce(this.keyboardConnectFrom
+        ? `Target: ${this.describeShape(shape)}, ${where}. Press Enter to connect.`
+        : `${this.describeShape(shape)}, ${where}`);
+      return true;
+    }
+
+    insertShapeFromKeyboard(type, below) {
+      const config = global.AsciiShapes.SHAPE_CONFIGS[type] || global.AsciiShapes.SHAPE_CONFIGS.rectangle;
+      const from = this.selectedShapeIds.size === 1 ? this.findShapeById([...this.selectedShapeIds][0]) : null;
+      let x, y;
+      if (from) {
+        x = below ? from.x : from.x + from.w + 6;
+        y = below ? from.y + from.h + 3 : from.y;
+      } else {
+        const rect = this.canvas.getBoundingClientRect();
+        const centre = this.screenToGrid(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        x = centre.col - Math.floor(config.defaultW / 2);
+        y = centre.row - Math.floor(config.defaultH / 2);
+      }
+      // Step on until the spot is free
+      const all = [...this.diagram.shapes, ...(this.diagram.notes || [])];
+      const overlaps = (px, py) => all.some(s => px < s.x + s.w + 1 && s.x < px + config.defaultW + 1 &&
+        py < s.y + s.h + 1 && s.y < py + config.defaultH + 1);
+      for (let i = 0; i < 200 && overlaps(x, y); i++) {
+        if (below) y += 2; else x += 2;
+      }
+
+      const shape = global.AsciiShapes.createShape(type, x, y, null, null, type === 'note' ? 'Note:\n' : '');
+      this.diagram.shapes.push(shape);
+      if (from) {
+        this.diagram.connectors.push(global.AsciiConnectors.createConnector(from.id, shape.id, 'auto', 'auto'));
+      }
+      this.selectedShapeIds.clear();
+      this.selectedConnectorIds.clear();
+      this.selectedShapeIds.add(shape.id);
+      this.setTool('select');
+      this.syncToolButtons('select');
+      this.recordHistory();
+      this.emitSelectionChange();
+      this.emitChange();
+      this.scrollShapeIntoView(shape);
+      this.render();
+      this.announce(`Added ${this.describeShape(shape)}${from ? `, connected from ${this.describeShape(from)}` : ''}. Type its text, then press Control+Enter.`);
+      this.startTextEditing(shape, { returnFocus: true });
+    }
+
+    syncToolButtons(tool) {
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tool') === tool));
+    }
+
+    describeShape(shape) {
+      const name = String(shape.type || 'shape').replace(/-/g, ' ');
+      const text = String(shape.text || '').replace(/\s+/g, ' ').trim();
+      return text ? `${name} "${text}"` : name;
+    }
+
+    // Pan so a shape is visible (keyboard selection may move off screen)
+    scrollShapeIntoView(shape) {
+      const rect = this.canvas.getBoundingClientRect();
+      const tl = this.gridToScreen(shape.x, shape.y);
+      const br = this.gridToScreen(shape.x + shape.w, shape.y + shape.h);
+      const margin = 40;
+      if (tl.x < margin) this.panX += margin - tl.x;
+      else if (br.x > rect.width - margin) this.panX -= br.x - (rect.width - margin);
+      if (tl.y < margin) this.panY += margin - tl.y;
+      else if (br.y > rect.height - margin) this.panY -= br.y - (rect.height - margin);
+    }
+
+    // Screen-reader announcement through a polite live region
+    announce(message) {
+      const region = document.getElementById('canvasAnnouncer');
+      if (!region) return;
+      region.textContent = '';
+      setTimeout(() => { region.textContent = message; }, 30);
     }
 
     // ==========================================
@@ -1315,9 +1499,10 @@
     // In-place Text Editing
     // ==========================================
 
-    startTextEditing(shape) {
+    startTextEditing(shape, { returnFocus = false } = {}) {
       if (!this.textEditor) return;
       this.editingShape = shape;
+      this.returnFocusAfterEdit = returnFocus;
 
       const screenPt = this.gridToScreen(shape.x + 1, shape.y + 1);
       const wPx = Math.max(120, (shape.w - 2) * this.cellWidth * this.zoom);
@@ -1351,6 +1536,10 @@
 
       this.textEditor.style.display = 'none';
       this.editingShape = null;
+      if (this.returnFocusAfterEdit) {
+        this.returnFocusAfterEdit = false;
+        this.canvas.focus();
+      }
       this.render();
     }
 
