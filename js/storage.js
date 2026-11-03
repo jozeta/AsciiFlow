@@ -9,6 +9,121 @@
   const STORAGE_KEY_DIAGRAM = 'asciiflow_diagram_data';
   const STORAGE_KEY_PREFS = 'asciiflow_preferences';
 
+  // ------------------------------------------------------------------
+  // Diagram validation
+  //
+  // Diagrams arrive from untrusted places: #diagram= share links, imported
+  // or dropped JSON files and localStorage. normalizeDiagram() runs every
+  // item through these sanitizers so a crafted diagram cannot freeze the tab
+  // (huge coordinates make the renderer allocate a huge grid) or smuggle in
+  // values of the wrong type. Valid diagrams pass through unchanged, so old
+  // share links keep working.
+  // ------------------------------------------------------------------
+
+  const VALID_MODES = ['unicode', 'ascii', 'unicode-curved'];
+
+  const LIMITS = {
+    coord: 1000,      // |x|, |y| in cells; keeps the render grid at most ~2000x2000
+    size: 500,        // max w / h of one shape in cells
+    items: 2000,      // max entries per list (shapes, connectors, texts, notes)
+    waypoints: 200,   // max waypoints per connector
+    text: 5000,       // max characters in shape text / connector label
+    name: 200,        // max characters in the diagram name
+    string: 200       // max characters in any other string field (ids, types, styles)
+  };
+
+  const BLOCKED_KEYS = ['__proto__', 'constructor', 'prototype'];
+
+  function clamp(n, min, max) {
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function limitString(value, max) {
+    if (typeof value !== 'string') return '';
+    return value.length > max ? value.slice(0, max) : value;
+  }
+
+  function sanitizeCoord(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? clamp(Math.round(n), -LIMITS.coord, LIMITS.coord) : 0;
+  }
+
+  function sanitizeSize(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? clamp(Math.round(n), 1, LIMITS.size) : 1;
+  }
+
+  function sanitizeText(v) {
+    return limitString(v === null || v === undefined ? '' : String(v), LIMITS.text);
+  }
+
+  function sanitizePoint(p) {
+    if (!p || typeof p !== 'object') return null;
+    const x = Number(p.x), y = Number(p.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x: sanitizeCoord(x), y: sanitizeCoord(y) };
+  }
+
+  function sanitizeWaypoints(list) {
+    if (!Array.isArray(list)) return [];
+    return list.slice(0, LIMITS.waypoints).map(sanitizePoint).filter(Boolean);
+  }
+
+  // Per-field rules. Any field not listed must be a short string, a finite
+  // number, a boolean or null; other values (objects, arrays, NaN) are dropped.
+  const SHAPE_FIELDS = {
+    x: sanitizeCoord, y: sanitizeCoord, w: sanitizeSize, h: sanitizeSize,
+    text: sanitizeText, label: sanitizeText
+  };
+  const CONNECTOR_FIELDS = {
+    fromPoint: sanitizePoint, toPoint: sanitizePoint,
+    waypoints: sanitizeWaypoints,
+    text: sanitizeText, label: sanitizeText
+  };
+
+  // Walks the item's own keys in their original order, so a valid item comes
+  // back identical (same values, same key order) to what went in.
+  function sanitizeItem(item, index, prefix, fields, required) {
+    const out = {};
+    for (const key of Object.keys(item)) {
+      if (BLOCKED_KEYS.includes(key)) continue;
+      const v = item[key];
+      if (key === 'id') {
+        if (typeof v === 'number' && Number.isFinite(v)) out.id = String(v);
+        else if (typeof v === 'string' && v) out.id = limitString(v, LIMITS.string);
+      } else if (fields[key]) {
+        out[key] = fields[key](v);
+      } else if (v === null || typeof v === 'boolean') {
+        out[key] = v;
+      } else if (typeof v === 'number' && Number.isFinite(v)) {
+        out[key] = v;
+      } else if (typeof v === 'string') {
+        out[key] = limitString(v, LIMITS.string);
+      }
+    }
+    if (!out.id) out.id = `${prefix}_imported_${index}`;
+    for (const key of required) {
+      if (!(key in out)) out[key] = fields[key](undefined);
+    }
+    return out;
+  }
+
+  function sanitizeShape(item, index) {
+    return sanitizeItem(item, index, 'shape', SHAPE_FIELDS, ['x', 'y']);
+  }
+
+  function sanitizeConnector(item, index) {
+    return sanitizeItem(item, index, 'conn', CONNECTOR_FIELDS, []);
+  }
+
+  function sanitizeList(list, sanitizeItem) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .slice(0, LIMITS.items)
+      .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+      .map(sanitizeItem);
+  }
+
   // Sample templates for quick exploration
   const SAMPLE_TEMPLATES = {
     'flowchart': {
@@ -402,19 +517,20 @@
      * Validate and normalize diagram structure
      */
     normalizeDiagram(data) {
-      if (!data || typeof data !== 'object') {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
         throw new Error('Invalid diagram data');
       }
 
+      const version = Number.isFinite(data.version) ? data.version : 1;
       return {
-        version: data.version || 1,
-        name: data.name || 'Untitled Diagram',
+        version: version,
+        name: limitString(data.name, LIMITS.name) || 'Untitled Diagram',
         updatedAt: new Date().toISOString(),
-        mode: data.mode || 'unicode',
-        shapes: Array.isArray(data.shapes) ? data.shapes : [],
-        connectors: Array.isArray(data.connectors) ? data.connectors : [],
-        texts: Array.isArray(data.texts) ? data.texts : [],
-        notes: Array.isArray(data.notes) ? data.notes : []
+        mode: VALID_MODES.includes(data.mode) ? data.mode : 'unicode',
+        shapes: sanitizeList(data.shapes, sanitizeShape),
+        connectors: sanitizeList(data.connectors, sanitizeConnector),
+        texts: sanitizeList(data.texts, sanitizeShape),
+        notes: sanitizeList(data.notes, sanitizeShape)
       };
     }
 

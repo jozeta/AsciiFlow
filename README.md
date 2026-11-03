@@ -6,7 +6,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 
 **🔗 [Try it live](https://jozeta.github.io/AsciiFlow/)**
 
-![image](Screenshot.png)
+![The AsciiFlow editor: shape toolbar on the left, a flowchart on the dotted canvas, and the live ASCII preview panel on the right](docs/screenshots/editor.png)
 
 ---
 
@@ -15,7 +15,7 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 - **Bidirectional Text & Code Import**:
   - **ASCII Reverse Engineering**: Paste raw ASCII / Unicode text diagrams. AsciiFlow extracts bounding boxes, text labels, borders, and connectors back into editable vector shapes!
   - **Mermaid Flowchart Import**: Paste Mermaid `graph TD` or `graph LR` syntax. Nodes, shapes, edge types, and labels are automatically parsed and arranged hierarchically with auto-layout!
-  - **Shareable URL Hash**: Generate instant shareable links with diagram data compressed into `#diagram=...` for frictionless collaboration without a backend database.
+  - **Shareable URL Hash**: Generate instant shareable links with the diagram data URL-encoded into `#diagram=...` for frictionless collaboration without a backend database.
 - **Smart Alignment & Auto-Layout**:
   - **Align Tools**: One-click alignment across multi-selections (Align Left, Center, Right, Top, Middle, Bottom).
   - **Distribute Tools**: Distribute 3+ shapes evenly across horizontal or vertical space.
@@ -42,8 +42,11 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 ```
 /
 ├── index.html          # Application shell, layout, modals, and toolbars
+├── README.md
+├── CHANGELOG.md        # Notable changes, newest first
+├── CLAUDE.md           # Guidance for Claude Code
+├── SECURITY.md         # How to report vulnerabilities
 ├── LICENSE             # MIT License
-├── .gitignore          # Git ignore specifications
 ├── css/
 │   └── app.css         # Nordic design system, light/dark themes, monospace styles
 ├── js/
@@ -52,12 +55,42 @@ Diagrams can be designed visually with drag-and-drop shapes, orthogonal connecto
 │   ├── shapes.js       # Shape definitions, geometry math, anchors, auto-fit, and grouping
 │   ├── connectors.js   # Connector models, segment hit-testing, styles, and terminal definitions
 │   ├── history.js      # Undo/Redo stack manager with snapshot cloning
-│   ├── storage.js      # Persistence, multi-format export (SVG, PNG, MD), and URL hash sharing
+│   ├── storage.js      # Persistence, import validation, exports (SVG, PNG, MD), and URL hash sharing
 │   ├── theme.js        # Light/Dark theme manager and reactive canvas updates
 │   ├── canvas.js       # Interactive canvas controller, magnetic snap, alignment, auto-layout
 │   └── app.js          # Main application orchestrator and event wiring
-└── README.md
+├── vendor/             # Self-hosted Bootstrap 5.3.3 and Bootstrap Icons 1.11.3 (MIT)
+├── tests/              # Node test suite (node --test tests/)
+└── docs/screenshots/   # README images
 ```
+
+## Running and testing
+
+There is no build step and nothing to install. Serve the folder and open it in a browser:
+
+```sh
+python3 -m http.server 8000      # then open http://localhost:8000/
+```
+
+The app makes no third-party network requests: Bootstrap and its icon font are served from
+`vendor/`.
+
+The test suite uses Node's built-in test runner (Node 18 or newer, no dependencies). It loads the
+browser scripts in a `vm` sandbox and covers rendering in both modes, ASCII/Mermaid import and
+diagram validation:
+
+```sh
+node --test tests/
+```
+
+## Security
+
+Diagrams loaded from share links, imported or dropped JSON files and browser storage are treated as
+untrusted. `normalizeDiagram()` in `js/storage.js` validates every item before it reaches the
+editor: unknown modes fall back to `unicode`, coordinates are clamped to ±1000 cells and shape
+sizes to 500, list lengths, waypoints and strings are capped, and values of unexpected types are
+dropped. Valid diagrams pass through unchanged, so existing share links keep working. See
+[SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ### 1. Internal Diagram Representation
 
