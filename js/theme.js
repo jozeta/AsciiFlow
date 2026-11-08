@@ -80,7 +80,6 @@
     updateUI() {
       const themeBtn = document.getElementById('themeToggleBtn');
       if (themeBtn) {
-        const icon = themeBtn.querySelector('i') || themeBtn;
         if (this.currentTheme === 'dark') {
           themeBtn.innerHTML = '<i class="bi bi-sun"></i>';
           themeBtn.title = 'Switch to Light Theme';

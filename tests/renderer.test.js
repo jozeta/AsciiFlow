@@ -113,6 +113,7 @@ for (const key of Object.keys(SAMPLE_TEMPLATES)) {
     const unicode = render(d, 'unicode');
 
     assert.ok(ascii.trim().length > 0);
+    // eslint-disable-next-line no-control-regex -- the ASCII range starts at \x00 on purpose
     assert.doesNotMatch(ascii, /[^\x00-\x7f]/, 'ascii mode must emit only ASCII');
     assert.match(unicode, /[─│┌┐└┘╭╮╰╯]/, 'unicode mode uses box-drawing characters');
 

@@ -45,7 +45,7 @@
     setupDragAndDrop();
 
     // 6. Connect Canvas Callbacks
-    canvas.onDiagramChange = (diagram, isMajor) => {
+    canvas.onDiagramChange = (_diagram, _isMajor) => {
       updateAsciiPreview();
       updateStatusInfo();
     };
@@ -433,7 +433,6 @@
   // ==========================================
 
   function setupPropertyBar() {
-    const propBar = document.getElementById('propertyBar');
     const selType = document.getElementById('propShapeType');
     const selAlign = document.getElementById('propTextAlign');
     const btnAutoFit = document.getElementById('btnPropAutoFit');
@@ -888,7 +887,6 @@
   function setupSettingsModal() {
     const selCharSet = document.getElementById('settingsCharSet');
     const selGrid = document.getElementById('settingsGrid');
-    const chkTrim = document.getElementById('settingsTrim');
 
     if (selCharSet) {
       selCharSet.value = canvas.diagram.mode || 'unicode';

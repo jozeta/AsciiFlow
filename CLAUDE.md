@@ -128,3 +128,16 @@ changes in the browser (draw, connect, export, re-import).
   diagrams unchanged. If you add a model field that holds an object or array, add a rule for it
   in `SHAPE_FIELDS`/`CONNECTOR_FIELDS`, or it will be dropped on load.
 - No CDNs or third-party requests: add front-end libraries under `vendor/<name>-<version>/`.
+
+## App standards
+
+This repo follows the app standards in `~/Desktop/code/tools/standards/STANDARDS.md` (rule IDs,
+severities; decisions and waivers in `.claude-standards`). `claude-check --repo .` checks it.
+
+```sh
+npm ci && npm run lint   # ESLint (dev-only), incl. the no-unsanitized rule; CI runs it too
+```
+
+`index.html` has a Content-Security-Policy meta tag (GitHub Pages can't set headers): scripts only
+from this site, no inline scripts or `on…=` handlers; images may be `data:`/`blob:` for the exports.
+

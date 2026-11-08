@@ -6,6 +6,10 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
+- Content-Security-Policy meta tag (scripts only from this site; `data:`/`blob:` images for exports)
+- ESLint (dev-only, with the no-unsanitized rule); CI runs `npm run lint`. Removed unused code
+- Animations and transitions respect the system's "Reduce motion" setting
+
 Nothing yet.
 
 ## 1.1.0 - 2026-11-03

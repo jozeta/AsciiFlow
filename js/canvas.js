@@ -20,7 +20,7 @@
   ];
 
   class AsciiCanvas {
-    constructor(canvasElement, options = {}) {
+    constructor(canvasElement, _options = {}) {
       this.canvas = canvasElement;
       this.ctx = canvasElement.getContext('2d');
       this.container = canvasElement.parentElement;
@@ -2465,7 +2465,7 @@
       }
     }
 
-    drawShapeCards(ctx, colors) {
+    drawShapeCards(_ctx, _colors) {
       // Shape backgrounds are transparent
     }
 
