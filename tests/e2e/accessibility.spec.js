@@ -22,9 +22,19 @@ async function setTheme(page, theme) {
   await page.waitForTimeout(400); // let colour transitions finish
 }
 
+// A first visit starts empty: open the flowchart template through a share link, which loads it like
+// the page load does (not undoable)
+async function openWithFlowchart(page) {
+  await page.goto('index.html');
+  const sample = await page.evaluate(() => window.AsciiStorage.getSample('flowchart'));
+  await page.goto('about:blank');
+  await page.goto(`index.html#diagram=${encodeURIComponent(JSON.stringify(sample))}`);
+  await expect(page.locator('#asciiPreview, pre').first()).toContainText('Login Request');
+}
+
 for (const theme of ['light', 'dark']) {
   test(`no WCAG A/AA violations in the ${theme} theme`, async ({ page }) => {
-    await page.goto('index.html');
+    await openWithFlowchart(page);
     await setTheme(page, theme);
     expect(await violations(page)).toEqual([]);
 
@@ -47,7 +57,7 @@ for (const theme of ['light', 'dark']) {
 }
 
 test('toggle buttons announce their state and the preview is reachable by keyboard', async ({ page }) => {
-  await page.goto('index.html');
+  await openWithFlowchart(page);
   await expect(page.locator('.tool-btn[data-tool="select"]')).toHaveAttribute('aria-pressed', 'true');
   await page.locator('.tool-btn[data-tool="rectangle"]').click();
   await expect(page.locator('.tool-btn[data-tool="rectangle"]')).toHaveAttribute('aria-pressed', 'true');

@@ -33,6 +33,16 @@ async function pointAtCell(page, col, row) {
   throw new Error(`could not point at cell ${col},${row}`);
 }
 
+// A first visit starts empty: open the flowchart template through a share link, which loads it like
+// the page load does (not undoable)
+async function openWithFlowchart(page) {
+  await page.goto('index.html');
+  const sample = await page.evaluate(() => window.AsciiStorage.getSample('flowchart'));
+  await page.goto('about:blank');
+  await page.goto(`index.html#diagram=${encodeURIComponent(JSON.stringify(sample))}`);
+  await expect(page.locator('#asciiPreview, pre').first()).toContainText('Login Request');
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('index.html');
   await page.evaluate(() => localStorage.clear());
@@ -50,14 +60,14 @@ test('loads without errors or third-party requests', async ({ page }) => {
 
   await page.goto('index.html');
   await expect(page.locator('#editorCanvas')).toBeVisible();
-  await expect(preview(page)).toContainText('Login Request');
+  expect(await objectCount(page)).toBe(0); // a first visit starts with an empty canvas
   expect(await page.evaluate(() => document.fonts.check('16px bootstrap-icons'))).toBe(true);
   expect(errors).toEqual([]);
   expect(external).toEqual([]);
 });
 
 test('undo and redo move exactly one step', async ({ page }) => {
-  await page.goto('index.html');
+  await openWithFlowchart(page);
   const undo = page.locator('#btnUndo');
   const redo = page.locator('#btnRedo');
   await expect(undo).toBeDisabled();
@@ -79,7 +89,7 @@ test('undo and redo move exactly one step', async ({ page }) => {
 
 test('New and Templates replace the diagram without a dialog and can be undone', async ({ page }) => {
   page.on('dialog', d => { throw new Error(`unexpected dialog: ${d.message()}`); });
-  await page.goto('index.html');
+  await openWithFlowchart(page);
   const start = await objectCount(page);
 
   await page.locator('#btnNew').click();

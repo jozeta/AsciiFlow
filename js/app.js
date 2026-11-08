@@ -76,7 +76,7 @@
   }
 
   /**
-   * Load saved preferences and diagram from localStorage or starter template
+   * Load saved preferences and the diagram from the URL or localStorage (else an empty canvas)
    */
   function loadInitialData() {
     const prefs = window.AsciiStorage.loadPreferences();
@@ -122,14 +122,9 @@
 
     // Diagram data
     const saved = window.AsciiStorage.loadAutoSavedDiagram();
+    // Without a saved diagram the canvas starts empty (templates are in the Templates menu)
     if (saved && saved.shapes && (saved.shapes.length > 0 || saved.connectors.length > 0)) {
       canvas.loadDiagram(saved);
-    } else {
-      // Load friendly flowchart template by default
-      const sample = window.AsciiStorage.getSample('flowchart');
-      if (sample) {
-        canvas.loadDiagram(sample);
-      }
     }
   }
 

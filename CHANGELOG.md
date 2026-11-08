@@ -6,6 +6,7 @@ Releases are tagged on GitHub (`vX.Y.Z`). Changes before 1.0.0 are grouped by da
 
 ## Unreleased
 
+- The canvas starts empty on a first visit (it used to load the flowchart template). Templates are still in the Templates menu; a saved diagram or a share link loads as before.
 - Content-Security-Policy meta tag (scripts only from this site; `data:`/`blob:` images for exports)
 - ESLint (dev-only, with the no-unsanitized rule); CI runs `npm run lint`. Removed unused code
 - Animations and transitions respect the system's "Reduce motion" setting
